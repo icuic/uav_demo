@@ -1,0 +1,10 @@
+# ignore all .log file
+*.log
+*.tmp
+
+# all files in devel and build folder
+/devel/
+/build/
+
+.catkin_workspace
+.vscode/

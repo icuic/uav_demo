@@ -1,0 +1,43 @@
+SIM_ID=$1
+# UAV_NAME=$2
+# ROS_PORT=$3
+# GAZ_PORT=$4
+ROSIP=$(hostname -I | cut -d' ' -f1)
+
+# export ROS_MASTER_URI=http://$ROSIP:$ROS_PORT;
+# export GAZ_MASTER_URI=http://$ROSIP:$GAZ_PORT;
+export ROS_IP=$ROSIP
+
+# echo "ROS_PORT = $ROS_PORT"
+# echo "GAZEBO_PORT = $GAZ_PORT"
+echo "ROS_IP = $ROS_IP"
+# echo "ROS_MASTER_URI = $ROS_MASTER_URI"
+# echo "GAZEBO_MASTER_URI = $GAXEBO_MASTER_URI"
+
+cd ~/ws/uav_demo
+catkin_make
+
+# px4 and gazebo
+screen -d -m -S "$(echo $SIM_ID)_landing_simulation" bash -i -c "cd ~/project/PX4-Autopilot; make px4_sitl gazebo-classic"&
+echo "Launch landing_simulation. Waiting 10 seconds to ensure proper start up..."
+sleep 10
+
+# mavros
+screen -d -m -S "$(echo $SIM_ID)_landing_mavros" bash -i -c "cd ~/ws/uav_demo; roslaunch mavros px4.launch fcu_url:=\"udp://:14540@127.0.0.1:14557\""&
+echo "Launch mavros. Waiting 10 seconds to ensure proper start up..."
+sleep 10
+
+# # offboard
+# screen -d -m -S "$(echo $SIM_ID)_landing_offboard" bash -i -c "source ~/ws/uav_demo/devel/setup.bash; cd ~/ws; rosrun offboard_run offboard_run_node"&
+# echo "Launch offboard. Waiting 10 seconds to ensure proper start up..."
+# sleep 10
+
+# offboard
+screen -d -m -S "$(echo $SIM_ID)_landing_offboard" bash -i -c "source ~/ws/uav_demo/devel/setup.bash; cd ~/ws; rosrun offboard_run uav_rl.py" 
+echo "Launch offboard. Waiting 10 seconds to ensure proper start up..."
+sleep 10
+
+# offboard
+# source ~/ws/uav_demo/devel/setup.bash; cd ~/ws; rosrun offboard_run uav_rl.py
+# echo "Launch offboard. Waiting 10 seconds to ensure proper start up..."
+# sleep 10
