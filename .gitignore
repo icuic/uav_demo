@@ -1,10 +1,14 @@
 # ignore all .log file
 *.log
 *.tmp
+*.pyc
 
 # all files in devel and build folder
 /devel/
 /build/
+
+# folder in this repo
+__pycache__/
 
 .catkin_workspace
 .vscode/

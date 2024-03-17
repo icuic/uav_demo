@@ -12,11 +12,15 @@ from geometry_msgs.msg import PoseStamped
 
 from mavros_msgs.msg import State, ExtendedState
 from mavros_msgs.srv import CommandBool, SetMode, CommandBoolRequest, SetModeRequest
+from std_msgs.msg import Header
 
+from threading import Thread
 from pymavlink import mavutil
 
 class simulationHandler():
     def __init__(self):
+        rospy.init_node("offb_test")
+
         self.ready = False
         self.sub_topics_ready = {
             key: False
@@ -39,16 +43,20 @@ class simulationHandler():
         self.ext_state_sub = rospy.Subscriber('mavros/extended_state', ExtendedState, self.extended_state_callback)
 
         # 发布话题 publish topic
-        # self.local_pos_pub = rospy.Publisher("mavros/setpoint_position/local", PoseStamped, queue_size=10)
         self.pos_setpoint_pub = rospy.Publisher('mavros/setpoint_position/local', PoseStamped, queue_size=10)
 
         # 创建服务客户端 service client
         self.set_arming_srv = rospy.ServiceProxy('mavros/cmd/arming', CommandBool)
         self.set_mode_srv = rospy.ServiceProxy('mavros/set_mode', SetMode)
 
+        # send setpoints in seperate thread
+        self.pos_thread = Thread(target=self.send_pos, args=(), name="pos_thread")
+        self.pos_thread.daemon = True
+        self.pos_thread.start()        
+
 
     def setup(self):
-        rospy.init_node("offb_test")
+        
 
         service_timeout = 60
         rospy.loginfo("waiting for ROS services")
@@ -78,46 +86,23 @@ class simulationHandler():
 
         rospy.loginfo("connected")
 
+        # 设置初始位置
         self.pos.pose.position.x = 0
         self.pos.pose.position.y = 0
         self.pos.pose.position.z = 2
 
-        for i in range(100):
-            if(rospy.is_shutdown()):
-                break
+        # 切换至 offboard 模式
+        while self.state.mode != "OFFBOARD":
+            self.set_mode("OFFBOARD", 5)
+        rospy.loginfo("switched to offboard mode")
 
-            self.pos_setpoint_pub.publish(self.pos)
+        # 解锁
+        while not self.state.armed:
+            self.set_arm(True, 5)
+        rospy.loginfo("swithed to armed")
+
+        while True:
             rate.sleep()
-
-        rospy.loginfo("post start position")
-
-        # self.set_mode("OFFBOARD", 5)
-        # self.set_arm(True, 5)
-
-        offb_set_mode = SetModeRequest()
-        offb_set_mode.custom_mode = 'OFFBOARD'
-
-        arm_cmd = CommandBoolRequest()
-        arm_cmd.value = True
-
-        last_req = rospy.Time.now()        
-
-        while(not rospy.is_shutdown()):
-            if(self.state.mode != "OFFBOARD" and (rospy.Time.now() - last_req) > rospy.Duration(5.0)):
-                if(self.set_mode_srv.call(offb_set_mode).mode_sent == True):
-                    rospy.loginfo("OFFBOARD enabled")
-
-                last_req = rospy.Time.now()
-            else:
-                if(not self.state.armed and (rospy.Time.now() - last_req) > rospy.Duration(5.0)):
-                    if(self.set_arming_srv.call(arm_cmd).success == True):
-                        rospy.loginfo("Vehicle armed")
-
-                    last_req = rospy.Time.now()
-
-            self.pos_setpoint_pub.publish(self.pos)
-
-            rate.sleep()        
 
         self.ready = True
 
@@ -154,6 +139,19 @@ class simulationHandler():
 
     def reset(self):
         pass
+
+    def send_pos(self):
+        rate = rospy.Rate(30)  # Hz
+        self.pos.header = Header()
+        self.pos.header.frame_id = "base_footprint"
+
+        while not rospy.is_shutdown():
+            self.pos.header.stamp = rospy.Time.now()
+            self.pos_setpoint_pub.publish(self.pos)
+            try:  # prevent garbage in console output when thread is killed
+                rate.sleep()
+            except rospy.ROSInterruptException:
+                pass
 
     # call service
     def set_mode(self, mode, timeout):

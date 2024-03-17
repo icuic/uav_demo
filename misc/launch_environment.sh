@@ -20,12 +20,12 @@ catkin_make
 # px4 and gazebo
 screen -d -m -S "$(echo $SIM_ID)_landing_simulation" bash -i -c "cd ~/project/PX4-Autopilot; make px4_sitl gazebo-classic"&
 echo "Launch landing_simulation. Waiting 10 seconds to ensure proper start up..."
-sleep 10
+sleep 5
 
 # mavros
 screen -d -m -S "$(echo $SIM_ID)_landing_mavros" bash -i -c "cd ~/ws/uav_demo; roslaunch mavros px4.launch fcu_url:=\"udp://:14540@127.0.0.1:14557\""&
 echo "Launch mavros. Waiting 10 seconds to ensure proper start up..."
-sleep 10
+sleep 5
 
 # # offboard
 # screen -d -m -S "$(echo $SIM_ID)_landing_offboard" bash -i -c "source ~/ws/uav_demo/devel/setup.bash; cd ~/ws; rosrun offboard_run offboard_run_node"&
@@ -33,11 +33,11 @@ sleep 10
 # sleep 10
 
 # offboard
-screen -d -m -S "$(echo $SIM_ID)_landing_offboard" bash -i -c "source ~/ws/uav_demo/devel/setup.bash; cd ~/ws; rosrun offboard_run uav_rl.py" 
-echo "Launch offboard. Waiting 10 seconds to ensure proper start up..."
-sleep 10
+# screen -d -m -S "$(echo $SIM_ID)_landing_offboard" bash -i -c "source ~/ws/uav_demo/devel/setup.bash; cd ~/ws; rosrun offboard_run uav_rl.py" 
+# echo "Launch offboard. Waiting 10 seconds to ensure proper start up..."
+# sleep 5
 
 # offboard
-# source ~/ws/uav_demo/devel/setup.bash; cd ~/ws; rosrun offboard_run uav_rl.py
-# echo "Launch offboard. Waiting 10 seconds to ensure proper start up..."
-# sleep 10
+source ~/ws/uav_demo/devel/setup.bash; cd ~/ws; rosrun offboard_run uav_rl.py
+echo "Launch offboard. Waiting 10 seconds to ensure proper start up..."
+sleep 5
