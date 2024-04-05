@@ -12,3 +12,6 @@ __pycache__/
 
 .catkin_workspace
 .vscode/
+
+misc/gym-examples/
+misc/gym-gazebo-px4/

@@ -6,7 +6,7 @@ import gymnasium
 
 import os
 import sys
-print(os.path.abspath("."))
+# print(os.path.abspath("."))
 # 由于使用roscore执行本脚本时的当前工作路径为工作空间路径(~/UAV_DEMO/)，所以需要将UAVGymEnv的路径手动添加到PATH中
 path = os.path.abspath(".")
 sys.path.insert(0, path + "/uav_demo/src/offboard_run/scripts")
@@ -18,6 +18,8 @@ sys.path.insert(0, path + "/uav_demo/src/offboard_run/scripts")
 print(sys.path)
 import UAVGymEnv
 
+import time
+import numpy as np
 
 env = gymnasium.make('UAVGymEnv/UAVLandingEnv-v0')
 observation = env.reset()
@@ -25,11 +27,18 @@ observation = env.reset()
 
 if __name__ == "__main__":
 
-    for _ in range(10):
-        action = env.action_space.sample()
-        observation, reward, terminated, truncated, info = env.step(action)
+    # for _ in range(10):
+    #     action = env.action_space.sample()
+    #     observation, reward, terminated, truncated, info = env.step(action)
 
-        if terminated or truncated:
-            observation, info = env.reset()
+    #     if terminated or truncated:
+    #         observation, info = env.reset()
 
-    env.close()
+    # env.close()
+
+    while(1):
+        action = 0
+        env.step(action)
+        time.sleep(5)
+        pass
+
