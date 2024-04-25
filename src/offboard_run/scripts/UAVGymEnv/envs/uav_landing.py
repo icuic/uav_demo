@@ -510,7 +510,7 @@ class UAVLandingEnv(gymnasium.Env):
         self.radius = 3
 
         self.pos = np.array([0, 0, 0])        
-        self.des = [170, 0, 15]
+        self.des = [20, 00, 0]
 
         rospy.loginfo("Environment is ready.")
 
@@ -527,6 +527,8 @@ class UAVLandingEnv(gymnasium.Env):
         old_position = [self.pos[0],
                         self.pos[1],
                         self.pos[2]]
+        print("---------------- start ------------------")
+        print("old self.pos: ", ' '.join(f"{pos:.2f}" for pos in self.pos))
 
         done_reason = ''
 
@@ -548,18 +550,18 @@ class UAVLandingEnv(gymnasium.Env):
         elif action == 6:  # stay
             cmd = 'stay' + '#' + str(margin)
 
-        # data = self.send_msg_get_return(cmd)
         data = self.simHandler.operate(cmd)
         self.pos = [data[0], data[1], data[2]]
-        lidar_ranges = data[3:]
-        for idx in range(0, len(lidar_ranges)):
-            if lidar_ranges[idx] > 10 or lidar_ranges[idx] == np.inf:
-                lidar_ranges[idx] = 10
 
-        # print('@env@ data' + str(data))
+        print("new self.pos: ", ' '.join(f"{pos:.2f}" for pos in self.pos))
+
+        # lidar_ranges = data[3:]
+        # for idx in range(0, len(lidar_ranges)):
+        #     if lidar_ranges[idx] > 10 or lidar_ranges[idx] == np.inf:
+        #         lidar_ranges[idx] = 10
 
         reward = 0
-        done = False  # done check
+        done = False
 
         # finish reward
         if self.is_at_position(self.des[0], self.des[1], self.des[2],
@@ -568,18 +570,25 @@ class UAVLandingEnv(gymnasium.Env):
             done = True
             done_reason = 'finish'
             reward = reward + 10
+
+        
+        print("self.des: ", ' '.join(f"{des:.2f}" for des in self.des))
+        print("reward (finish): ", reward)
+
         # move reward
         reward = reward + 2 * self.cal_distence(old_position, self.pos, self.des)
+        print("reward (move): ", reward)
+
 
         # danger reward
-        for i in lidar_ranges:
-            if i < 1.5:
-                reward = -5
-                done = True
-                if done and done_reason == '':
-                    done_reason = 'laser_danger'
-            elif i <= 6:
-                reward = reward - 1 / (i - 1)
+        # for i in lidar_ranges:
+        #     if i < 1.5:
+        #         reward = -5
+        #         done = True
+        #         if done and done_reason == '':
+        #             done_reason = 'laser_danger'
+        #     elif i <= 6:
+        #         reward = reward - 1 / (i - 1)
 
         # fail reward
         if (self.pos[0] < -50 or
@@ -592,18 +601,20 @@ class UAVLandingEnv(gymnasium.Env):
             if done and done_reason == '':
                 done_reason = 'out of map'
 
+        print("reward (fail): ", reward)
+
         # trans relative position
         data[0] = data[0] - self.des[0]
         data[1] = data[1] - self.des[1]
         data[2] = data[2] - self.des[2]
 
-        for idx in range(len(data)):
-            if idx < 3:
-                data[idx] = (data[idx] + 50) / 100
-            else:
-                if data[idx] > 10 or data[idx] == np.inf:
-                    data[idx] = 10
-                data[idx] = (data[idx] - 0.2) / 9.8
+        # for idx in range(len(data)):
+        #     if idx < 3:
+        #         data[idx] = (data[idx] + 50) / 100
+        #     else:
+        #         if data[idx] > 10 or data[idx] == np.inf:
+        #             data[idx] = 10
+        #         data[idx] = (data[idx] - 0.2) / 9.8
 
         state = data
 
@@ -615,6 +626,8 @@ class UAVLandingEnv(gymnasium.Env):
         # print('@env@ observation:' + str(state))
         # print('@env@ reward:' + str(reward))
         # print('@env@ done:' + str(done))
+        print("---------------- end ------------------")
+
         return state, reward, done, {'done_reason': done_reason}
     
     def reset(self, seed=None, options=None):
@@ -626,7 +639,7 @@ class UAVLandingEnv(gymnasium.Env):
         except rospy.ServiceException as e:
             print ("@env@ /gazebo/reset_world service call failed")
 
-        data = self.simHandler.takeoff()
+        data = self.simHandler.takeoff()        
 
         data[0] = data[0] - self.des[0]
         data[1] = data[1] - self.des[1]

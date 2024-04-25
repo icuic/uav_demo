@@ -36,9 +36,21 @@ if __name__ == "__main__":
 
     # env.close()
 
+    action = 0
+    strAction = ["x+", "x-", "y+", "y-", "z+", "z-", "keep"]
+
     while(1):
-        action = 0
-        env.step(action)
-        time.sleep(5)
+        print("=========================================")
+        print("current action: " + strAction[action])
+        
+        state, reward, done, info = env.step(action)
+        print("State:", state)
+        print("Reward:", reward)
+        print("Done:", done)
+        # print("Info:", info)  
+        
+        
+
+        time.sleep(10)
         pass
 
