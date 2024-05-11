@@ -9,7 +9,7 @@ import rospy
 import math
 
 # 
-from geometry_msgs.msg import PoseStamped, Quaternion
+from geometry_msgs.msg import PoseStamped, TwistStamped, Quaternion
 
 from mavros_msgs.msg import State, ExtendedState
 from mavros_msgs.srv import CommandBool, SetMode, CommandBoolRequest, SetModeRequest
@@ -53,6 +53,7 @@ class simulationHandler():
 
         # 发布的话题 topic published
         self.pos = PoseStamped()
+        self.vel = TwistStamped()
         
         # 订阅的话题 topic subscribed
         self.state = State()
@@ -66,6 +67,7 @@ class simulationHandler():
 
         # 本节点发布的话题
         self.pos_setpoint_pub = rospy.Publisher('mavros/setpoint_position/local', PoseStamped, queue_size=10)
+        self.vel_setpoint_pub = rospy.Publisher('mavros/setpoint_velocity/cmd_vel', TwistStamped, queue_size=10)
 
         # 创建服务客户端
         self.set_mode_srv = rospy.ServiceProxy('mavros/set_mode', SetMode)
@@ -73,6 +75,7 @@ class simulationHandler():
 
         # 创建新线程，专门用于发布话题
         self.pos_thread = Thread(target=self.send_pos, args=(), name="pos_thread")
+        # self.pos_thread = Thread(target=self.send_vel, args=(), name="vel_thread")
         self.pos_thread.daemon = True
         self.pos_thread.start()        
 
@@ -220,6 +223,19 @@ class simulationHandler():
         while not rospy.is_shutdown():
             self.pos.header.stamp = rospy.Time.now()
             self.pos_setpoint_pub.publish(self.pos)
+            try:  # prevent garbage in console output when thread is killed
+                rate.sleep()
+            except rospy.ROSInterruptException:
+                pass
+
+    def send_vel(self):
+        rate = rospy.Rate(30)
+        self.vel.header = Header()
+        self.vel.header.frame_id = "manual_vel"
+
+        while not rospy.is_shutdown():
+            self.vel.header.stamp = rospy.Time.now()
+            self.vel_setpoint_pub.publish(self.vel)
             try:  # prevent garbage in console output when thread is killed
                 rate.sleep()
             except rospy.ROSInterruptException:
@@ -403,6 +419,11 @@ class simulationHandler():
         self.pos.pose.position.y = y
         self.pos.pose.position.z = z
 
+        # set a position setpoint
+        # self.vel.twist.linear.x = 0
+        # self.vel.twist.linear.y = 0
+        # self.vel.twist.linear.z = 1
+
         # For demo purposes we will lock yaw/heading to north.
         yaw_degrees = 0  # North
         yaw = math.radians(yaw_degrees)
@@ -415,7 +436,7 @@ class simulationHandler():
         for i in range(timeout * loop_freq):
             if self.is_at_position(self.pos.pose.position.x,
                                    self.pos.pose.position.y,
-                                   self.pos.pose.position.z, self.radius):
+                                   self.pos.pose.position.z, self.radius):            
                 break
             try:
                 rate.sleep()
@@ -503,14 +524,15 @@ class UAVLandingEnv(gymnasium.Env):
         self.simHandler = simulationHandler()
 
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float32)
-        self.action_space = spaces.Discrete(7)  # U, D, F, B, L, R
+        self.action_space = spaces.Discrete(4)  # U, D, F, B, L, R
         self.reward_range = (-np.inf, np.inf)
 
         self._seed()
-        self.radius = 3
+        self.radius = 0.5
 
         self.pos = np.array([0, 0, 0])        
-        self.des = [20, 00, 0]
+        self.des = [3, 0, 5]
+        self.cnt = 0
 
         rospy.loginfo("Environment is ready.")
 
@@ -527,8 +549,8 @@ class UAVLandingEnv(gymnasium.Env):
         old_position = [self.pos[0],
                         self.pos[1],
                         self.pos[2]]
-        print("---------------- start ------------------")
-        print("old self.pos: ", ' '.join(f"{pos:.2f}" for pos in self.pos))
+        # print("---------------- start ------------------")
+        # print("old self.pos: ", ' '.join(f"{pos:.2f}" for pos in self.pos))
 
         done_reason = ''
 
@@ -543,12 +565,12 @@ class UAVLandingEnv(gymnasium.Env):
             cmd = 'moveYPlus' + '#' + str(margin)
         elif action == 3:  # yMin
             cmd = 'moveYMin' + '#' + str(margin)
-        elif action == 4:  # up
-            cmd = 'moveUp' + '#' + str(margin)
-        elif action == 5:  # down
-            cmd = 'moveDown' + '#' + str(margin)
-        elif action == 6:  # stay
-            cmd = 'stay' + '#' + str(margin)
+        # elif action == 4:  # up
+        #     cmd = 'moveUp' + '#' + str(margin)
+        # elif action == 5:  # down
+        #     cmd = 'moveDown' + '#' + str(margin)
+        # elif action == 4:  # stay
+        #     cmd = 'stay' + '#' + str(margin)
 
         data = self.simHandler.operate(cmd)
         self.pos = [data[0], data[1], data[2]]
@@ -571,37 +593,38 @@ class UAVLandingEnv(gymnasium.Env):
             done_reason = 'finish'
             reward = reward + 10
 
-        
-        print("self.des: ", ' '.join(f"{des:.2f}" for des in self.des))
-        print("reward (finish): ", reward)
+        # print("self.des: ", ' '.join(f"{des:.2f}" for des in self.des))
+        # print(f"reward (finish): {reward:.2f}")
 
         # move reward
-        reward = reward + 2 * self.cal_distence(old_position, self.pos, self.des)
-        print("reward (move): ", reward)
-
-
-        # danger reward
-        # for i in lidar_ranges:
-        #     if i < 1.5:
-        #         reward = -5
-        #         done = True
-        #         if done and done_reason == '':
-        #             done_reason = 'laser_danger'
-        #     elif i <= 6:
-        #         reward = reward - 1 / (i - 1)
+        distance = self.cal_distence(self.pos, self.des)
+        if distance < 0.8:
+            reward += 10
+        elif distance <= 6:
+            reward -= 0.6*distance
+        else: # > 6
+            reward -= 10
+     
+        # print(f"reward (move): {reward:.2f}")
 
         # fail reward
-        if (self.pos[0] < -50 or
-                self.pos[0] > 50 or
-                np.abs(self.pos[1]) > 50 or
+        if (self.pos[0] < -5 or
+                self.pos[0] > 5 or
+                np.abs(self.pos[1]) > 5 or
                 self.pos[2] > 40 or
                 self.pos[2] < 1):
-            reward = reward - 5
+            reward -= 20
             done = True
             if done and done_reason == '':
                 done_reason = 'out of map'
 
-        print("reward (fail): ", reward)
+        self.cnt += 1
+        if self.cnt > 500:
+            done = True
+            done_reason = 'timeout'
+
+        # print(f"reward (fail): {reward:.2f}")
+        print(f"done: {done}-({done_reason}), reward: {reward:.2f}, ")
 
         # trans relative position
         data[0] = data[0] - self.des[0]
@@ -626,7 +649,7 @@ class UAVLandingEnv(gymnasium.Env):
         # print('@env@ observation:' + str(state))
         # print('@env@ reward:' + str(reward))
         # print('@env@ done:' + str(done))
-        print("---------------- end ------------------")
+        # print("---------------- end ------------------")
 
         return state, reward, done, {'done_reason': done_reason}
     
@@ -660,6 +683,7 @@ class UAVLandingEnv(gymnasium.Env):
         if 'nan' in str(state):
             state = np.zeros([len(state)])
 
+        self.cnt = 0
         rospy.loginfo("Env is reset.")
 
         return state
@@ -682,6 +706,12 @@ class UAVLandingEnv(gymnasium.Env):
                 destination[2] - new_position[2]))
 
         return old_distance - new_distance
+
+    def cal_distence(self, new_position, destination):
+        new_distance = np.sqrt(
+            np.square(destination[0] - new_position[0]) + np.square(destination[1] - new_position[1]))
+
+        return new_distance
 
     def close(self):
         pass
