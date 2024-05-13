@@ -15,7 +15,7 @@ sys.path.insert(0, path + "/uav_demo/src/offboard_run/scripts")
 # /home/ubuntu/ws/uav_demo/src/offboard_run/scripts/UAVGymEnv/envs/uav_landing.py
 # /home/ubuntu/ws/src/offboard_run/scripts/UAVGymEnv
 
-print(sys.path)
+# print(sys.path)
 import UAVGymEnv
 from dqn import *
 import random

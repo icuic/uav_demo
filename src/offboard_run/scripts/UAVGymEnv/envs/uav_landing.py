@@ -8,7 +8,7 @@ import numpy as np
 import rospy
 import math
 
-# 
+#
 from geometry_msgs.msg import PoseStamped, TwistStamped, Quaternion
 
 from mavros_msgs.msg import State, ExtendedState
@@ -54,7 +54,7 @@ class simulationHandler():
         # 发布的话题 topic published
         self.pos = PoseStamped()
         self.vel = TwistStamped()
-        
+
         # 订阅的话题 topic subscribed
         self.state = State()
         self.extended_state = ExtendedState()
@@ -77,7 +77,7 @@ class simulationHandler():
         self.pos_thread = Thread(target=self.send_pos, args=(), name="pos_thread")
         # self.pos_thread = Thread(target=self.send_vel, args=(), name="vel_thread")
         self.pos_thread.daemon = True
-        self.pos_thread.start()        
+        self.pos_thread.start()
 
         # Target offset radius
         self.radius = 0.25
@@ -85,7 +85,7 @@ class simulationHandler():
         # Gazebo 提供的服务
         # self.unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
         # self.pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
-        # self.reset_proxy = rospy.ServiceProxy('/gazebo/reset_world', Empty)        
+        # self.reset_proxy = rospy.ServiceProxy('/gazebo/reset_world', Empty)
 
     def setup(self):
         service_timeout = 60
@@ -156,15 +156,15 @@ class simulationHandler():
             # print('@ctrl_server@ get cmd ' + str(data))
             # get cmd content
             cmd = data[0]
-            margin = 1
+            margin = 0.5
             if 1 < len(data) < 3:
-                margin = int(data[1])
+                margin = float(data[1])
 
             r_msg = ''
 
             # print('@ctrl_server@ executing cmd: ' + cmd)
             if cmd == 'reset':
-                self.reach_position(0, 0, 0, 2)
+                self.reach_position(0, 0, 5, 5)
                 self.land()
                 r_msg = self.getState()
 
@@ -181,16 +181,16 @@ class simulationHandler():
 
             elif cmd == 'move':
                 self.move(data[1], data[2], data[3])
-                r_msg = self.getState()                
+                r_msg = self.getState()
             else:
                 self.moveOnce(cmd, margin)
                 r_msg = self.getState()
             # print('@ctrl_server@ executing' + cmd + 'over, return msg ' + str(r_msg))
             return r_msg
-        
+
         except BaseException as e:
             print(e)
-            time.sleep(3)  
+            time.sleep(3)
 
     def reset(self):
         self.reach_position(0, 0, 0, 2)
@@ -205,7 +205,7 @@ class simulationHandler():
         self.set_mode("AUTO.LAND", 5)
         self.wait_for_landed_state(mavutil.mavlink.MAV_LANDED_STATE_ON_GROUND,
                                    45, 0)
-        self.set_arm(False, 5)    
+        self.set_arm(False, 5)
 
     def getState(self):
         data = np.array([self.local_position.pose.position.x,
@@ -241,108 +241,8 @@ class simulationHandler():
             except rospy.ROSInterruptException:
                 pass
 
-    # services 
-    def step(self, action):
-        margin = 1
-        rospy.wait_for_service('/gazebo/unpause_physics')
-        try:
-            self.unpause()
-        except (rospy.ServiceException) as e:
-            print ("/gazebo/unpause_physics service call failed")
-
-        old_position = [self.pos[0],
-                        self.pos[1],
-                        self.pos[2]]
-
-        done_reason = ''
-
-        cmd = ''
-        if type(action) == np.numarray:
-            cmd = 'move#{0}#{1}#{2}'.format(action[0], action[1], action[2])
-        elif action == 0:  # xPlus
-            cmd = 'moveXPlus' + '#' + str(margin)
-        elif action == 1:  # xMin
-            cmd = 'moveXMin' + '#' + str(margin)
-        elif action == 2:  # yPlus
-            cmd = 'moveYPlus' + '#' + str(margin)
-        elif action == 3:  # yMin
-            cmd = 'moveYMin' + '#' + str(margin)
-        elif action == 4:  # up
-            cmd = 'moveUp' + '#' + str(margin)
-        elif action == 5:  # down
-            cmd = 'moveDown' + '#' + str(margin)
-        elif action == 6:  # stay
-            cmd = 'stay' + '#' + str(margin)
-
-        data = self.send_msg_get_return(cmd)
-        self.pos = [data[0], data[1], data[2]]
-        lidar_ranges = data[3:]
-        for idx in range(0, len(lidar_ranges)):
-            if lidar_ranges[idx] > 10 or lidar_ranges[idx] == np.inf:
-                lidar_ranges[idx] = 10
-
-        # print('@env@ data' + str(data))
-
-        reward = 0
-        done = False  # done check
-
-        # finish reward
-        if self.is_at_position(self.des[0], self.des[1], self.des[2],
-                               self.pos[0], self.pos[1], self.pos[2],
-                               self.radius):
-            done = True
-            done_reason = 'finish'
-            reward = reward + 10
-        # move reward
-        reward = reward + 2 * self.cal_distence(old_position, self.pos, self.des)
-
-        # danger reward
-        for i in lidar_ranges:
-            if i < 1.5:
-                reward = -5
-                done = True
-                if done and done_reason == '':
-                    done_reason = 'laser_danger'
-            elif i <= 6:
-                reward = reward - 1 / (i - 1)
-
-        # fail reward
-        if (self.pos[0] < -50 or
-                self.pos[0] > 50 or
-                np.abs(self.pos[1]) > 50 or
-                self.pos[2] > 40 or
-                self.pos[2] < 1):
-            reward = reward - 5
-            done = True
-            if done and done_reason == '':
-                done_reason = 'out of map'
-
-        # trans relative position
-        data[0] = data[0] - self.des[0]
-        data[1] = data[1] - self.des[1]
-        data[2] = data[2] - self.des[2]
-
-        for idx in range(len(data)):
-            if idx < 3:
-                data[idx] = (data[idx] + 50) / 100
-            else:
-                if data[idx] > 10 or data[idx] == np.inf:
-                    data[idx] = 10
-                data[idx] = (data[idx] - 0.2) / 9.8
-
-        state = data
-
-        if 'nan' in str(data):
-            state = np.zeros([len(data)])
-            done = True
-            reward = 0
-
-        # print('@env@ observation:' + str(state))
-        # print('@env@ reward:' + str(reward))
-        # print('@env@ done:' + str(done))
-        return state, reward, done, {'done_reason': done_reason}            
-
     def moveOnce(self, cmd, margin):
+        self.local_position.pose.position.z = 5
         if cmd == 'moveUp':
             self.moveUp(margin)
         elif cmd == 'moveDown':
@@ -356,7 +256,7 @@ class simulationHandler():
         elif cmd == 'moveYMin':
             self.moveYMin(margin)
         elif cmd == 'stay':
-            pass            
+            pass
 
     def moveUp(self, margin=1):
         if not self.ready:
@@ -410,7 +310,7 @@ class simulationHandler():
         t_x = self.pos.pose.position.x + float(x)
         t_y = self.pos.pose.position.y + float(y)
         t_z = self.pos.pose.position.z + float(z)
-        self.reach_position(t_x, t_y, t_z, timeout)            
+        self.reach_position(t_x, t_y, t_z, timeout)
 
     def reach_position(self, x, y, z, timeout):
         """timeout(int): seconds"""
@@ -436,7 +336,7 @@ class simulationHandler():
         for i in range(timeout * loop_freq):
             if self.is_at_position(self.pos.pose.position.x,
                                    self.pos.pose.position.y,
-                                   self.pos.pose.position.z, self.radius):            
+                                   self.pos.pose.position.z, self.radius):
                 break
             try:
                 rate.sleep()
@@ -503,12 +403,18 @@ class simulationHandler():
     def state_callback(self, data):
         self.state = data
         if not self.sub_topics_ready['state'] and data.connected:
-            self.sub_topics_ready['state'] = True 
+            self.sub_topics_ready['state'] = True
 
     def extended_state_callback(self, data):
         self.extended_state = data
         if not self.sub_topics_ready['ext_state']:
-            self.sub_topics_ready['ext_state'] = True               
+            self.sub_topics_ready['ext_state'] = True
+
+    def set_pos(self):
+        self.pos.pose.position.x = 0
+        self.pos.pose.position.y = 0
+        self.pos.pose.position.z = 5
+
 
 
 class UAVLandingEnv(gymnasium.Env):
@@ -530,16 +436,16 @@ class UAVLandingEnv(gymnasium.Env):
         self._seed()
         self.radius = 0.5
 
-        self.pos = np.array([0, 0, 0])        
+        self.pos = np.array([0, 0, 5])
         self.des = [3, 0, 5]
         self.cnt = 0
 
         rospy.loginfo("Environment is ready.")
 
         time.sleep(5)
-    
+
     def step(self, action):
-        margin = 1
+        margin = 0.5
         rospy.wait_for_service('/gazebo/unpause_physics')
         try:
             self.unpause()
@@ -591,29 +497,28 @@ class UAVLandingEnv(gymnasium.Env):
                                self.radius):
             done = True
             done_reason = 'finish'
-            reward = reward + 10
+            reward = reward + 100
 
         # print("self.des: ", ' '.join(f"{des:.2f}" for des in self.des))
         # print(f"reward (finish): {reward:.2f}")
 
         # move reward
         distance = self.cal_distence(self.pos, self.des)
-        if distance < 0.8:
+        if distance < 1:
             reward += 10
         elif distance <= 6:
             reward -= 0.6*distance
         else: # > 6
             reward -= 10
-     
+
         # print(f"reward (move): {reward:.2f}")
 
         # fail reward
-        if (self.pos[0] < -5 or
-                self.pos[0] > 5 or
+        if (np.abs(self.pos[0]) > 5 or
                 np.abs(self.pos[1]) > 5 or
                 self.pos[2] > 40 or
                 self.pos[2] < 1):
-            reward -= 20
+            reward -= 50
             done = True
             if done and done_reason == '':
                 done_reason = 'out of map'
@@ -633,7 +538,7 @@ class UAVLandingEnv(gymnasium.Env):
 
         # for idx in range(len(data)):
         #     if idx < 3:
-        #         data[idx] = (data[idx] + 50) / 100
+        #         data[idx] = (data[idx] + 5) / 10
         #     else:
         #         if data[idx] > 10 or data[idx] == np.inf:
         #             data[idx] = 10
@@ -652,9 +557,12 @@ class UAVLandingEnv(gymnasium.Env):
         # print("---------------- end ------------------")
 
         return state, reward, done, {'done_reason': done_reason}
-    
+
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
+
+        self.pos = np.array([0, 0, 5])
+        self.simHandler.set_pos()
 
         rospy.wait_for_service('/gazebo/reset_world')
         try:
@@ -662,21 +570,19 @@ class UAVLandingEnv(gymnasium.Env):
         except rospy.ServiceException as e:
             print ("@env@ /gazebo/reset_world service call failed")
 
-        data = self.simHandler.takeoff()        
+        data = self.simHandler.takeoff()
 
         data[0] = data[0] - self.des[0]
         data[1] = data[1] - self.des[1]
         data[2] = data[2] - self.des[2]
 
-        self.pos = np.array([0, 0, 0])
-
-        for idx in range(len(data)):
-            if idx < 3:
-                data[idx] = (data[idx] + 50) / 100
-            else:
-                if data[idx] > 10 or data[idx] == np.inf:
-                    data[idx] = 10
-                data[idx] = (data[idx] - 0.2) / 9.8
+        # for idx in range(len(data)):
+        #     if idx < 3:
+        #         data[idx] = (data[idx] + 5) / 10
+        #     else:
+        #         if data[idx] > 10 or data[idx] == np.inf:
+        #             data[idx] = 10
+        #         data[idx] = (data[idx] - 0.2) / 9.8
 
         state = data
 
@@ -718,4 +624,4 @@ class UAVLandingEnv(gymnasium.Env):
 
     def _seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
-        return [seed]    
+        return [seed]
