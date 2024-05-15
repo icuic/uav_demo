@@ -6,6 +6,8 @@ from tqdm import tqdm
 import torch
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import pickle
+import json
 
 class ReplayBuffer:
     ''' 经验回放池 '''
@@ -22,6 +24,23 @@ class ReplayBuffer:
 
     def size(self):  # 目前buffer中数据的数量
         return len(self.buffer)
+    
+    def save(self, file_path):
+        with open(file_path, 'wb') as f:
+            pickle.dump(self.buffer, f)
+
+    def load(self, file_path):
+        with open(file_path, 'rb') as f:
+            self.buffer = pickle.load(f)      
+
+    def __str__(self):
+        # 将buffer中的内容转换为字符串表示
+        experiences = ['Experience ' + str(i) + ': ' + str(exp) for i, exp in enumerate(self.buffer)]
+        return '\n'.join(experiences)              
+
+    def print_buffer(self):
+        # 输出buffer的内容
+        print(self.__str__())
     
 class Qnet(torch.nn.Module):
     ''' 只有一层隐藏层的Q网络 '''
@@ -89,6 +108,18 @@ class DQN:
                 self.q_net.state_dict())  # 更新目标网络
         self.count += 1
 
+        def save(self, path, i):
+            torch.save({
+                'q_net_state': self.q_net.state_dict(),
+                'target_q_net_state': self.target_q_net.state_dict(),
+                'optimizer_state': self.optimizer.state_dict()
+            }, f'{path}/{i}_state_dict.pth')
+
+        def load(self, path, i):
+            checkpoint = torch.load(f'{path}/{i}_state_dict.pth')
+            self.q_net.load_state_dict(checkpoint['q_net_state'])
+            self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_state'])
 
 if __name__ == "__main__":
     lr = 2e-3

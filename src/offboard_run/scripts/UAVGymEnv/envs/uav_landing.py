@@ -41,15 +41,10 @@ from sensor_msgs.msg import LaserScan
 from gymnasium.utils import seeding
 
 class simulationHandler():
-    def __init__(self):
 
+    def __init__(self):
         self.ready = False
-        self.sub_topics_ready = {
-            key: False
-            for key in [
-                'local_pos', 'state', 'ext_state'
-            ]
-        }
+        self.sub_topics_ready = {key: False for key in ['local_pos', 'state', 'ext_state']}
 
         # 发布的话题 topic published
         self.pos = PoseStamped()
@@ -67,7 +62,7 @@ class simulationHandler():
 
         # 本节点发布的话题
         self.pos_setpoint_pub = rospy.Publisher('mavros/setpoint_position/local', PoseStamped, queue_size=10)
-        self.vel_setpoint_pub = rospy.Publisher('mavros/setpoint_velocity/cmd_vel', TwistStamped, queue_size=10)
+        # self.vel_setpoint_pub = rospy.Publisher('mavros/setpoint_velocity/cmd_vel', TwistStamped, queue_size=10)
 
         # 创建服务客户端
         self.set_mode_srv = rospy.ServiceProxy('mavros/set_mode', SetMode)
@@ -114,10 +109,10 @@ class simulationHandler():
 
         self.set_mode("OFFBOARD", 5)
         self.set_arm(True, 5)
-        self.reach_position(0, 0, 5, 10)
+        # self.reach_position(0, 0, 5, 10)
 
         self.ready = True
-
+        time.sleep(5)
 
     def wait_for_topics(self, timeout):
         """wait for simulation to be ready, make sure we're getting topic info
@@ -193,7 +188,7 @@ class simulationHandler():
             time.sleep(3)
 
     def reset(self):
-        self.reach_position(0, 0, 0, 2)
+        self.reach_position(0, 0, 5, 20)
         self.land()
         return self.getState()
 
@@ -219,6 +214,7 @@ class simulationHandler():
         rate = rospy.Rate(30)  # Hz
         self.pos.header = Header()
         self.pos.header.frame_id = "base_footprint"
+        self.set_pos()
 
         while not rospy.is_shutdown():
             self.pos.header.stamp = rospy.Time.now()
@@ -325,10 +321,10 @@ class simulationHandler():
         # self.vel.twist.linear.z = 1
 
         # For demo purposes we will lock yaw/heading to north.
-        yaw_degrees = 0  # North
-        yaw = math.radians(yaw_degrees)
-        quaternion = quaternion_from_euler(0, 0, yaw)
-        self.pos.pose.orientation = Quaternion(*quaternion)
+        # yaw_degrees = 0  # North
+        # yaw = math.radians(yaw_degrees)
+        # quaternion = quaternion_from_euler(0, 0, yaw)
+        # self.pos.pose.orientation = Quaternion(*quaternion)
 
         # dose it reach the position in 'time' seconds?
         loop_freq = 100  # Hz
@@ -423,6 +419,7 @@ class UAVLandingEnv(gymnasium.Env):
         rospy.init_node("offb_test")
 
         rospy.wait_for_service('/gazebo/unpause_physics', 30)
+
         self.unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
         self.pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
         self.reset_proxy = rospy.ServiceProxy('/gazebo/reset_world', Empty)
@@ -620,6 +617,7 @@ class UAVLandingEnv(gymnasium.Env):
         return new_distance
 
     def close(self):
+        self.simHandler.reset()
         pass
 
     def _seed(self, seed=None):
