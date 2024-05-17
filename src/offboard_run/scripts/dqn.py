@@ -72,6 +72,9 @@ class DQN:
         self.count = 0  # 计数器,记录更新次数
         self.device = device
 
+    def set_epsilon(self, _epsilon):
+        self.epsilon = _epsilon
+
     def take_action(self, state):  # epsilon-贪婪策略采取动作
         if np.random.random() < self.epsilon:
             action = np.random.randint(self.action_dim)
@@ -108,18 +111,18 @@ class DQN:
                 self.q_net.state_dict())  # 更新目标网络
         self.count += 1
 
-        def save(self, path, i):
-            torch.save({
-                'q_net_state': self.q_net.state_dict(),
-                'target_q_net_state': self.target_q_net.state_dict(),
-                'optimizer_state': self.optimizer.state_dict()
-            }, f'{path}/{i}_state_dict.pth')
+    def save(self, path, i):
+        torch.save({
+            'q_net_state': self.q_net.state_dict(),
+            'target_q_net_state': self.target_q_net.state_dict(),
+            'optimizer_state': self.optimizer.state_dict()
+        }, f'{path}/{i}_state_dict.pth')
 
-        def load(self, path, i):
-            checkpoint = torch.load(f'{path}/{i}_state_dict.pth')
-            self.q_net.load_state_dict(checkpoint['q_net_state'])
-            self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
-            self.optimizer.load_state_dict(checkpoint['optimizer_state'])
+    def load(self, path, i):
+        checkpoint = torch.load(f'{path}/{i}_state_dict.pth')
+        self.q_net.load_state_dict(checkpoint['q_net_state'])
+        self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
+        self.optimizer.load_state_dict(checkpoint['optimizer_state'])
 
 if __name__ == "__main__":
     lr = 2e-3

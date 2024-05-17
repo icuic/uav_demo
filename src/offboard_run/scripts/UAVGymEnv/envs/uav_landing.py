@@ -40,6 +40,10 @@ from sensor_msgs.msg import LaserScan
 
 from gymnasium.utils import seeding
 
+g_des_x = 1
+g_des_y = 1
+g_des_z = 10
+
 class simulationHandler():
 
     def __init__(self):
@@ -47,7 +51,7 @@ class simulationHandler():
         self.sub_topics_ready = {key: False for key in ['local_pos', 'state', 'ext_state']}
 
         # 发布的话题 topic published
-        self.pos = PoseStamped()
+        self.pos = PoseStamped()        
         self.vel = TwistStamped()
 
         # 订阅的话题 topic subscribed
@@ -95,8 +99,6 @@ class simulationHandler():
 
 
     def getReady(self):
-        # rospy.loginfo('@ctrl_server@ getReady and takeoff')
-
         try:
             rospy.wait_for_service('mavros/cmd/arming', 60)
             rospy.wait_for_service('mavros/set_mode', 60)
@@ -109,10 +111,10 @@ class simulationHandler():
 
         self.set_mode("OFFBOARD", 5)
         self.set_arm(True, 5)
-        # self.reach_position(0, 0, 5, 10)
+        self.reach_position(g_des_x, g_des_y, g_des_z, 10)
 
         self.ready = True
-        time.sleep(5)
+        # time.sleep(5)
 
     def wait_for_topics(self, timeout):
         """wait for simulation to be ready, make sure we're getting topic info
@@ -159,7 +161,7 @@ class simulationHandler():
 
             # print('@ctrl_server@ executing cmd: ' + cmd)
             if cmd == 'reset':
-                self.reach_position(0, 0, 5, 5)
+                self.reach_position(g_des_x, g_des_y, g_des_z, 5)
                 self.land()
                 r_msg = self.getState()
 
@@ -188,7 +190,7 @@ class simulationHandler():
             time.sleep(3)
 
     def reset(self):
-        self.reach_position(0, 0, 5, 20)
+        self.reach_position(1, 1, 10, 20)
         self.land()
         return self.getState()
 
@@ -238,7 +240,7 @@ class simulationHandler():
                 pass
 
     def moveOnce(self, cmd, margin):
-        self.local_position.pose.position.z = 5
+        self.local_position.pose.position.z = g_des_z
         if cmd == 'moveUp':
             self.moveUp(margin)
         elif cmd == 'moveDown':
@@ -407,9 +409,9 @@ class simulationHandler():
             self.sub_topics_ready['ext_state'] = True
 
     def set_pos(self):
-        self.pos.pose.position.x = 0
-        self.pos.pose.position.y = 0
-        self.pos.pose.position.z = 5
+        self.pos.pose.position.x = g_des_x
+        self.pos.pose.position.y = g_des_y
+        self.pos.pose.position.z = g_des_z
 
 
 
@@ -433,8 +435,8 @@ class UAVLandingEnv(gymnasium.Env):
         self._seed()
         self.radius = 0.5
 
-        self.pos = np.array([0, 0, 5])
-        self.des = [3, 0, 5]
+        self.pos = np.array([g_des_x, g_des_y, g_des_z])
+        self.des = [3, 3, g_des_z]
         self.cnt = 0
 
         rospy.loginfo("Environment is ready.")
@@ -558,7 +560,7 @@ class UAVLandingEnv(gymnasium.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
-        self.pos = np.array([0, 0, 5])
+        self.pos = np.array([g_des_x, g_des_y, g_des_z])
         self.simHandler.set_pos()
 
         rospy.wait_for_service('/gazebo/reset_world')
@@ -573,18 +575,10 @@ class UAVLandingEnv(gymnasium.Env):
         data[1] = data[1] - self.des[1]
         data[2] = data[2] - self.des[2]
 
-        # for idx in range(len(data)):
-        #     if idx < 3:
-        #         data[idx] = (data[idx] + 5) / 10
-        #     else:
-        #         if data[idx] > 10 or data[idx] == np.inf:
-        #             data[idx] = 10
-        #         data[idx] = (data[idx] - 0.2) / 9.8
-
         state = data
 
-        if 'nan' in str(state):
-            state = np.zeros([len(state)])
+        # if 'nan' in str(state):
+        #     state = np.zeros([len(state)])
 
         self.cnt = 0
         rospy.loginfo("Env is reset.")
