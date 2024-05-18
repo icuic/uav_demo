@@ -49,7 +49,7 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     restore_from_checkpoint = True
-    restore_from = 2
+    restore_from = 8
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
     env = gymnasium.make(env_name)
@@ -107,7 +107,7 @@ if __name__ == "__main__":
     strAction = ["x+", "x-", "y+", "y-"]
     total_iterated = 0
 
-    for i_episode in range(500):
+    for i_episode in range(restore_from+1, 500):
         # print("--------------type s---------------")
         # print(f"i_episode: {type(i_episode)}")
         # print(f"num_episodes: {type(num_episodes)}")
