@@ -49,12 +49,14 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     restore_from_checkpoint = True
-    restore_from = 8
+    restore_from = 4
+    episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
     env = gymnasium.make(env_name)
 
     if restore_from_checkpoint:
+        episode_from = restore_from + 1
         with open(f"{checkpoints_path}/{restore_from}_hyperparameter.json") as f:
             d = json.load(f)
             tmp_episode = d.get('episode')
@@ -107,7 +109,8 @@ if __name__ == "__main__":
     strAction = ["x+", "x-", "y+", "y-"]
     total_iterated = 0
 
-    for i_episode in range(restore_from+1, 500):
+
+    for i_episode in range(episode_from, 500):
         # print("--------------type s---------------")
         # print(f"i_episode: {type(i_episode)}")
         # print(f"num_episodes: {type(num_episodes)}")
@@ -127,13 +130,13 @@ if __name__ == "__main__":
         episode_return = 0
         state = env.reset()
         done = False
-        time.sleep(60)
+        time.sleep(20)
 
         # for i in range(500):
         #     env.step(0)
         #     time.sleep(1)
 
-
+        print(f"{'='*20} episode: {i_episode} {'='*20}")
         i_step = 0
         while not done:                    
             time.sleep(1)

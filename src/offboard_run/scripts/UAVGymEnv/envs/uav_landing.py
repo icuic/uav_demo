@@ -40,9 +40,21 @@ from sensor_msgs.msg import LaserScan
 
 from gymnasium.utils import seeding
 
-g_des_x = 1
-g_des_y = 1
-g_des_z = 10
+# 起飞点
+g_start_point_x = 1
+g_start_point_y = 1
+g_start_point_z = 10
+
+# 目的地
+g_destination_x = 3
+g_destination_y = 3
+g_destination_z = 10
+
+# 地理围栏
+g_max_x = 5
+g_max_y = 5
+g_max_z = 100
+g_min_z = 1
 
 class simulationHandler():
 
@@ -111,7 +123,8 @@ class simulationHandler():
 
         self.set_mode("OFFBOARD", 5)
         self.set_arm(True, 5)
-        self.reach_position(g_des_x, g_des_y, g_des_z, 10)
+        self.reach_position(g_start_point_x, g_start_point_y, g_start_point_z, 10)
+        print(f"try to reach: {g_start_point_x}, {g_start_point_y}, {g_start_point_z}")
 
         self.ready = True
         # time.sleep(5)
@@ -240,7 +253,7 @@ class simulationHandler():
                 pass
 
     def moveOnce(self, cmd, margin):
-        self.local_position.pose.position.z = g_des_z
+        self.local_position.pose.position.z = g_start_point_z
         if cmd == 'moveUp':
             self.moveUp(margin)
         elif cmd == 'moveDown':
@@ -409,9 +422,9 @@ class simulationHandler():
             self.sub_topics_ready['ext_state'] = True
 
     def set_pos(self):
-        self.pos.pose.position.x = g_des_x
-        self.pos.pose.position.y = g_des_y
-        self.pos.pose.position.z = g_des_z
+        self.pos.pose.position.x = g_start_point_x
+        self.pos.pose.position.y = g_start_point_y
+        self.pos.pose.position.z = g_start_point_z
 
 
 
@@ -433,35 +446,29 @@ class UAVLandingEnv(gymnasium.Env):
         self.reward_range = (-np.inf, np.inf)
 
         self._seed()
-        self.radius = 0.5
 
-        self.pos = np.array([g_des_x, g_des_y, g_des_z])
-        self.des = [3, 3, g_des_z]
+        self.radius = 0.5
+        self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
+        self.des = [g_destination_x, g_destination_y, g_destination_z]
         self.cnt = 0
 
         rospy.loginfo("Environment is ready.")
 
         time.sleep(5)
 
-    def step(self, action):
-        margin = 0.5
+    def step(self, action):        
         rospy.wait_for_service('/gazebo/unpause_physics')
         try:
             self.unpause()
         except (rospy.ServiceException) as e:
             print ("/gazebo/unpause_physics service call failed")
 
-        old_position = [self.pos[0],
-                        self.pos[1],
-                        self.pos[2]]
-        # print("---------------- start ------------------")
-        # print("old self.pos: ", ' '.join(f"{pos:.2f}" for pos in self.pos))
-
         done_reason = ''
-
         cmd = ''
-        if type(action) == np.numarray:
-            cmd = 'move#{0}#{1}#{2}'.format(action[0], action[1], action[2])
+        margin = 0.5
+
+        if type(action) == np.ndarray:
+            cmd = f'move#{action[0]}#{action[1]}#{action[2]}'
         elif action == 0:  # xPlus
             cmd = 'moveXPlus' + '#' + str(margin)
         elif action == 1:  # xMin
@@ -477,46 +484,37 @@ class UAVLandingEnv(gymnasium.Env):
         # elif action == 4:  # stay
         #     cmd = 'stay' + '#' + str(margin)
 
+        old_position = np.array([self.position[0], self.position[1], self.position[2]])
+
         data = self.simHandler.operate(cmd)
-        self.pos = [data[0], data[1], data[2]]
-
-        print("new self.pos: ", ' '.join(f"{pos:.2f}" for pos in self.pos))
-
-        # lidar_ranges = data[3:]
-        # for idx in range(0, len(lidar_ranges)):
-        #     if lidar_ranges[idx] > 10 or lidar_ranges[idx] == np.inf:
-        #         lidar_ranges[idx] = 10
+        self.position = [data[0], data[1], data[2]]
+        print("self.position: ", ' '.join(f"{pos:.2f}" for pos in self.position))
 
         reward = 0
         done = False
 
-        # finish reward
-        if self.is_at_position(self.des[0], self.des[1], self.des[2],
-                               self.pos[0], self.pos[1], self.pos[2],
-                               self.radius):
+        # reward
+        distance = self.cal_distence(self.position, self.des)
+        if distance < self.radius:
             done = True
             done_reason = 'finish'
             reward = reward + 100
-
-        # print("self.des: ", ' '.join(f"{des:.2f}" for des in self.des))
-        # print(f"reward (finish): {reward:.2f}")
-
-        # move reward
-        distance = self.cal_distence(self.pos, self.des)
-        if distance < 1:
-            reward += 10
+        elif distance < 1:
+            reward += 10-distance
         elif distance <= 6:
             reward -= 0.6*distance
         else: # > 6
-            reward -= 10
+            reward -= 10+distance
 
-        # print(f"reward (move): {reward:.2f}")
+        delta = self.cmp_distence(old_position, self.position, self.des)
+        reward += delta
+
 
         # fail reward
-        if (np.abs(self.pos[0]) > 5 or
-                np.abs(self.pos[1]) > 5 or
-                self.pos[2] > 40 or
-                self.pos[2] < 1):
+        if (np.abs(self.position[0]) > g_max_x or
+                np.abs(self.position[1]) > g_max_y or
+                self.position[2] > g_max_z or
+                self.position[2] < g_min_z):
             reward -= 50
             done = True
             if done and done_reason == '':
@@ -560,7 +558,18 @@ class UAVLandingEnv(gymnasium.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
 
-        self.pos = np.array([g_des_x, g_des_y, g_des_z])
+        # 随机生成起飞点和目的地
+        global g_start_point_x, g_start_point_y, g_start_point_z, g_destination_x, g_destination_y, g_destination_z
+        g_start_point_x, g_start_point_y, g_start_point_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
+        g_destination_x, g_destination_y, g_destination_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
+        
+        self.position = [g_start_point_x, g_start_point_y, g_start_point_z]
+        self.des = [g_destination_x, g_destination_y, g_destination_z]
+
+        print("start point: ", ' '.join(f"{pos}" for pos in self.position))
+        print("destination: ", ' '.join(f"{pos}" for pos in self.des))
+
+        # self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
         self.simHandler.set_pos()
 
         rospy.wait_for_service('/gazebo/reset_world')
@@ -588,12 +597,8 @@ class UAVLandingEnv(gymnasium.Env):
     def set_des(self, destination):
         self.des = destination
 
-    def is_at_position(self, tx, ty, tz, x, y, z, offset):
-        desired = np.array((tx, ty, tz))
-        pos = np.array((x, y, z))
-        return np.linalg.norm(desired - pos) < offset
 
-    def cal_distence(self, old_position, new_position, destination):
+    def cmp_distence(self, old_position, new_position, destination):
         old_distance = np.sqrt(
             np.square(destination[0] - old_position[0]) + np.square(destination[1] - old_position[1]) + np.square(
                 destination[2] - old_position[2]))
