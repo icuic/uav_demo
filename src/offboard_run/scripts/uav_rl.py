@@ -26,10 +26,11 @@ import time
 import json
 import rl_utils as rl_utils
 
-checkpoints_path = './checkpoints'
+test_time = "0520-1041"
+checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
-    folder_name = 'checkpoints'
+    folder_name = 'checkpoints/'+test_time
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
         print(f"Folder '{folder_name}' created successfully.")
@@ -49,7 +50,7 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     restore_from_checkpoint = True
-    restore_from = 26
+    restore_from = 475
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
@@ -77,7 +78,7 @@ if __name__ == "__main__":
         lr = 2e-3
         num_episodes = 500
         gamma = 0.98
-        epsilon = 0.9
+        epsilon = 1
         target_update = 10
         buffer_size = 10000
         minimal_size = 500
@@ -130,7 +131,7 @@ if __name__ == "__main__":
         episode_return = 0
         state = env.reset()
         done = False
-        time.sleep(20)
+        time.sleep(5)
 
         # for i in range(500):
         #     env.step(0)
@@ -139,7 +140,7 @@ if __name__ == "__main__":
         print(f"{'='*20} episode: {i_episode} {'='*20}")
         i_step = 0
         while not done:                    
-            time.sleep(1)
+            # time.sleep(1)
             action = agent.take_action(state)
             # action = 0
 

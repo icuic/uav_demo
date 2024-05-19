@@ -24,7 +24,7 @@ from tf.transformations import quaternion_from_euler
 
 
 import time
-
+import random
 
 import subprocess
 import os
@@ -91,7 +91,7 @@ class simulationHandler():
         self.pos_thread.start()
 
         # Target offset radius
-        self.radius = 0.25
+        self.radius = 0.2
 
         # Gazebo 提供的服务
         # self.unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
@@ -447,7 +447,7 @@ class UAVLandingEnv(gymnasium.Env):
 
         self._seed()
 
-        self.radius = 0.5
+        self.radius = 0.4
         self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
         self.des = [g_destination_x, g_destination_y, g_destination_z]
         self.cnt = 0
@@ -465,7 +465,7 @@ class UAVLandingEnv(gymnasium.Env):
 
         done_reason = ''
         cmd = ''
-        margin = 0.5
+        margin = 0.3
 
         if type(action) == np.ndarray:
             cmd = f'move#{action[0]}#{action[1]}#{action[2]}'
@@ -500,15 +500,14 @@ class UAVLandingEnv(gymnasium.Env):
             done_reason = 'finish'
             reward = reward + 100
         elif distance < 1:
-            reward += 10-distance
-        elif distance <= 6:
-            reward -= 0.6*distance
+            reward -= distance
+        elif distance < 6:
+            reward -= 2*distance
         else: # > 6
-            reward -= 10+distance
+            reward -= 3*distance
 
         delta = self.cmp_distence(old_position, self.position, self.des)
         reward += delta
-
 
         # fail reward
         if (np.abs(self.position[0]) > g_max_x or
@@ -521,7 +520,7 @@ class UAVLandingEnv(gymnasium.Env):
                 done_reason = 'out of map'
 
         self.cnt += 1
-        if self.cnt > 500:
+        if self.cnt > 200:
             done = True
             done_reason = 'timeout'
 
@@ -560,8 +559,17 @@ class UAVLandingEnv(gymnasium.Env):
 
         # 随机生成起飞点和目的地
         global g_start_point_x, g_start_point_y, g_start_point_z, g_destination_x, g_destination_y, g_destination_z
-        g_start_point_x, g_start_point_y, g_start_point_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
-        g_destination_x, g_destination_y, g_destination_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
+        
+        g_start_point_x = round(random.uniform(-1*g_max_x, g_max_x), 1)
+        g_start_point_y = round(random.uniform(-1*g_max_y, g_max_y), 1)
+        g_start_point_z = 10
+        
+        g_destination_x = round(random.uniform(-1*g_max_x, g_max_x), 1)
+        g_destination_y = round(random.uniform(-1*g_max_y, g_max_y), 1)
+        g_destination_z = 10
+
+        # g_start_point_x, g_start_point_y, g_start_point_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
+        # g_destination_x, g_destination_y, g_destination_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
         
         self.position = [g_start_point_x, g_start_point_y, g_start_point_z]
         self.des = [g_destination_x, g_destination_y, g_destination_z]
