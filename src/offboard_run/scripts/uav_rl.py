@@ -49,7 +49,7 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     restore_from_checkpoint = True
-    restore_from = 4
+    restore_from = 26
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
