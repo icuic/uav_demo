@@ -26,7 +26,7 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0520-1041"
+test_time = "0521-1039"
 checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
@@ -45,12 +45,20 @@ def load_return_list(i, path):
     with open(f"{path}/{i}_return_list.pkl", 'rb') as f:
         return pickle.load(f)
 
+def save_steps_distance_list(i, path, steps_distance_list):
+    with open(f"{path}/{i}_step_distance_list.pkl", 'wb') as f:
+        pickle.dump(steps_distance_list, f)
+
+def load_steps_distance_list(i, path):
+    with open(f"{path}/{i}_step_distance_list.pkl", 'rb') as f:
+        return pickle.load(f)
+
 if __name__ == "__main__":
 
     create_checkpoints_folder()
 
     restore_from_checkpoint = True
-    restore_from = 475
+    restore_from = 999
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
@@ -104,14 +112,16 @@ if __name__ == "__main__":
         agent.load(checkpoints_path, restore_from)
 
     return_list = []
+    steps_distance_list = []
     if restore_from_checkpoint:
         return_list = load_return_list(restore_from, checkpoints_path)
+        steps_distance_list = load_steps_distance_list(restore_from, checkpoints_path)
 
     strAction = ["x+", "x-", "y+", "y-"]
     total_iterated = 0
 
 
-    for i_episode in range(episode_from, 500):
+    for i_episode in range(episode_from, 1500):
         # print("--------------type s---------------")
         # print(f"i_episode: {type(i_episode)}")
         # print(f"num_episodes: {type(num_episodes)}")
@@ -129,7 +139,9 @@ if __name__ == "__main__":
         # print("--------------type e---------------")
 
         episode_return = 0
-        state = env.reset()
+        distance = 0
+        state, info = env.reset()
+        distance = info.get('distance')
         done = False
         time.sleep(5)
 
@@ -170,12 +182,14 @@ if __name__ == "__main__":
         epsilon *= 0.98
         agent.set_epsilon(epsilon)
         return_list.append(episode_return)
+        steps_distance_list.append(round(i_step/distance, 2))
 
         print(f'episode: {i_episode}, return: {episode_return}')
 
         agent.save(checkpoints_path, i_episode)
         replay_buffer.save(f"{checkpoints_path}/{i_episode}_buffer.pth")
         save_return_list(i_episode, checkpoints_path, return_list)
+        save_steps_distance_list(i_episode, checkpoints_path, steps_distance_list)
 
         parameter_keys = ['episode', 'num_episodes', 'total_iterated', 'target_update', 'epsilon', 
                           'batch_size', 'lr', 'gamma', 'buffer_size', 'minimal_size', 'state_dim', 'action_dim', 'hidden_dim']

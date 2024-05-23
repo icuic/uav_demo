@@ -447,7 +447,7 @@ class UAVLandingEnv(gymnasium.Env):
 
         self._seed()
 
-        self.radius = 0.4
+        self.radius = 0.5
         self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
         self.des = [g_destination_x, g_destination_y, g_destination_z]
         self.cnt = 0
@@ -600,7 +600,7 @@ class UAVLandingEnv(gymnasium.Env):
         self.cnt = 0
         rospy.loginfo("Env is reset.")
 
-        return state
+        return state, {'distance':abs(g_start_point_x-g_destination_x)+abs(g_start_point_y-g_destination_y)}
 
     def set_des(self, destination):
         self.des = destination
