@@ -79,8 +79,9 @@ class DQN:
         if np.random.random() < self.epsilon:
             action = np.random.randint(self.action_dim)
         else:
-            state = torch.tensor(state, dtype=torch.float).to(self.device)
-            action = self.q_net(state).argmax().item()
+            with torch.no_grad():
+                state = torch.tensor(state, dtype=torch.float).to(self.device)
+                action = self.q_net(state).argmax().item()
         return action
 
     def update(self, transition_dict):
@@ -123,6 +124,11 @@ class DQN:
         self.q_net.load_state_dict(checkpoint['q_net_state'])
         self.target_q_net.load_state_dict(checkpoint['target_q_net_state'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state'])
+
+    def eval(self):
+        self.q_net.eval()
+        self.target_q_net.eval()
+        
 
 if __name__ == "__main__":
     lr = 2e-3

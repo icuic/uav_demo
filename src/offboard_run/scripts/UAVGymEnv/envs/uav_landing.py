@@ -43,12 +43,12 @@ from gymnasium.utils import seeding
 # 起飞点
 g_start_point_x = 1
 g_start_point_y = 1
-g_start_point_z = 10
+g_start_point_z = 3
 
 # 目的地
 g_destination_x = 3
 g_destination_y = 3
-g_destination_z = 10
+g_destination_z = g_start_point_z
 
 # 地理围栏
 g_max_x = 5
@@ -203,7 +203,7 @@ class simulationHandler():
             time.sleep(3)
 
     def reset(self):
-        self.reach_position(1, 1, 10, 20)
+        self.reach_position(1, 1, g_start_point_z, 20)
         self.land()
         return self.getState()
 
@@ -560,13 +560,21 @@ class UAVLandingEnv(gymnasium.Env):
         # 随机生成起飞点和目的地
         global g_start_point_x, g_start_point_y, g_start_point_z, g_destination_x, g_destination_y, g_destination_z
         
-        g_start_point_x = round(random.uniform(-1*g_max_x, g_max_x), 1)
-        g_start_point_y = round(random.uniform(-1*g_max_y, g_max_y), 1)
-        g_start_point_z = 10
+        # g_start_point_x = round(random.uniform(-1*g_max_x, g_max_x), 1)
+        # g_start_point_y = round(random.uniform(-1*g_max_y, g_max_y), 1)
+        # g_start_point_z = g_start_point_z
         
-        g_destination_x = round(random.uniform(-1*g_max_x, g_max_x), 1)
-        g_destination_y = round(random.uniform(-1*g_max_y, g_max_y), 1)
-        g_destination_z = 10
+        # g_destination_x = round(random.uniform(-1*g_max_x, g_max_x), 1)
+        # g_destination_y = round(random.uniform(-1*g_max_y, g_max_y), 1)
+        # g_destination_z = g_start_point_z
+
+        g_start_point_x = 2
+        g_start_point_y = 3
+        g_start_point_z = g_start_point_z
+        
+        g_destination_x = -3
+        g_destination_y = -2
+        g_destination_z = g_start_point_z
 
         # g_start_point_x, g_start_point_y, g_start_point_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
         # g_destination_x, g_destination_y, g_destination_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
@@ -624,7 +632,8 @@ class UAVLandingEnv(gymnasium.Env):
         return new_distance
 
     def close(self):
-        self.simHandler.reset()
+        # self.simHandler.reset()
+        self.simHandler.land()
         pass
 
     def _seed(self, seed=None):
