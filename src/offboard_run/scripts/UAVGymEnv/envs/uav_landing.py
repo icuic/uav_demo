@@ -9,7 +9,7 @@ import rospy
 import math
 
 #
-from geometry_msgs.msg import PoseStamped, TwistStamped, Quaternion
+from geometry_msgs.msg import PoseStamped, TwistStamped, Quaternion, Twist
 
 from mavros_msgs.msg import State, ExtendedState
 from mavros_msgs.srv import CommandBool, SetMode, CommandBoolRequest, SetModeRequest
@@ -78,15 +78,15 @@ class simulationHandler():
 
         # 本节点发布的话题
         self.pos_setpoint_pub = rospy.Publisher('mavros/setpoint_position/local', PoseStamped, queue_size=10)
-        # self.vel_setpoint_pub = rospy.Publisher('mavros/setpoint_velocity/cmd_vel', TwistStamped, queue_size=10)
+        self.vel_setpoint_pub = rospy.Publisher('mavros/setpoint_velocity/cmd_vel', TwistStamped, queue_size=10)
 
         # 创建服务客户端
         self.set_mode_srv = rospy.ServiceProxy('mavros/set_mode', SetMode)
         self.set_arming_srv = rospy.ServiceProxy('mavros/cmd/arming', CommandBool)
 
         # 创建新线程，专门用于发布话题
-        self.pos_thread = Thread(target=self.send_pos, args=(), name="pos_thread")
-        # self.pos_thread = Thread(target=self.send_vel, args=(), name="vel_thread")
+        # self.pos_thread = Thread(target=self.send_pos, args=(), name="pos_thread")
+        self.pos_thread = Thread(target=self.send_vel, args=(), name="vel_thread")
         self.pos_thread.daemon = True
         self.pos_thread.start()
 
@@ -123,7 +123,7 @@ class simulationHandler():
 
         self.set_mode("OFFBOARD", 5)
         self.set_arm(True, 5)
-        self.reach_position(g_start_point_x, g_start_point_y, g_start_point_z, 10)
+        # self.reach_position(g_start_point_x, g_start_point_y, g_start_point_z, 10)
         print(f"try to reach: {g_start_point_x}, {g_start_point_y}, {g_start_point_z}")
 
         self.ready = True
@@ -189,6 +189,10 @@ class simulationHandler():
                 # r_msg = 'recv shutdown'
                 pass
 
+            elif cmd == 'setVelocity':
+                self.setVelocity(data[1], data[2])
+                r_msg = self.getState()
+
             elif cmd == 'move':
                 self.move(data[1], data[2], data[3])
                 r_msg = self.getState()
@@ -196,6 +200,7 @@ class simulationHandler():
                 self.moveOnce(cmd, margin)
                 r_msg = self.getState()
             # print('@ctrl_server@ executing' + cmd + 'over, return msg ' + str(r_msg))
+            # print(f'r_msg: ', r_msg)
             return r_msg
 
         except BaseException as e:
@@ -426,7 +431,17 @@ class simulationHandler():
         self.pos.pose.position.y = g_start_point_y
         self.pos.pose.position.z = g_start_point_z
 
-
+    def setVelocity(self, vx, vy):
+        self.vel.twist.linear.x = 0
+        self.vel.twist.linear.y = 0
+    
+        vz = 0
+        if self.local_position.pose.position.z < 4:
+            vz = 0.2
+        elif self.local_position.pose.position.z > 5:
+            vz = -0.2
+    
+        self.vel.twist.linear.z = vz
 
 class UAVLandingEnv(gymnasium.Env):
     def __init__(self):
@@ -468,7 +483,10 @@ class UAVLandingEnv(gymnasium.Env):
         margin = 0.3
 
         if type(action) == np.ndarray:
-            cmd = f'move#{action[0]}#{action[1]}#{action[2]}'
+            if action.size == 3:
+                cmd = f'move#{action[0]}#{action[1]}#{action[2]}'
+            elif action.size == 2:
+                cmd = f'setVelocity#{action[0]}#{action[1]}'
         elif action == 0:  # xPlus
             cmd = 'moveXPlus' + '#' + str(margin)
         elif action == 1:  # xMin
@@ -587,6 +605,8 @@ class UAVLandingEnv(gymnasium.Env):
 
         # self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
         self.simHandler.set_pos()
+
+        self.simHandler.setVelocity(0, 0)
 
         rospy.wait_for_service('/gazebo/reset_world')
         try:

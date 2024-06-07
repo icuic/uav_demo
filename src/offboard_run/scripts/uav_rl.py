@@ -26,7 +26,7 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0521-1039"
+test_time = "0607-1445"
 checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
@@ -57,7 +57,7 @@ if __name__ == "__main__":
 
     create_checkpoints_folder()
 
-    restore_from_checkpoint = True
+    restore_from_checkpoint = False
     restore_from = 999
     episode_from = 0
 
@@ -145,9 +145,10 @@ if __name__ == "__main__":
         done = False
         time.sleep(5)
 
-        # for i in range(500):
-        #     env.step(0)
-        #     time.sleep(1)
+        while True:
+            env.step(np.zeros(2))
+            time.sleep(1)
+            pass
 
         print(f"{'='*20} episode: {i_episode} {'='*20}")
         i_step = 0
