@@ -59,8 +59,8 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     algorithm = 'ddpg'
-    restore_from_checkpoint = False
-    restore_from = 999
+    restore_from_checkpoint = True
+    restore_from = 15
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
@@ -181,7 +181,7 @@ if __name__ == "__main__":
 
         print(f'episode: {i_episode}, return: {episode_return}')
 
-        if i_episode % 20 == 0:
+        if i_episode % 5 == 0:
             agent.save(checkpoints_path, i_episode)
             replay_buffer.save(f"{checkpoints_path}/{i_episode}_buffer.pth")
             save_return_list(i_episode, checkpoints_path, return_list)

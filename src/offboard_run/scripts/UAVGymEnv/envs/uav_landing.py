@@ -532,6 +532,8 @@ class UAVLandingEnv(gymnasium.Env):
         shaping_current = -100*np.sqrt(tmp_p[0]**2 + tmp_p[1]**2) - 10*np.sqrt(tmp_v[0]**2 + tmp_v[1]**2) + 10*C
         reward  = shaping_current - self.last_shaping
         done = C
+        if done:
+            done_reason = 'finish'
 
         self.last_position = np.array(self.position)
 
