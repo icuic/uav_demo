@@ -59,8 +59,8 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     algorithm = 'ddpg'
-    restore_from_checkpoint = True
-    restore_from = 15
+    restore_from_checkpoint = False
+    restore_from = 25
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
@@ -75,7 +75,6 @@ if __name__ == "__main__":
 
             actor_lr = d.get('actor_lr')
             critic_lr = d.get('critic_lr')
-            num_episodes.d.get('num_episodes')
             hidden_dim = d.get('hidden_dim')
             gamma = d.get('gamma')
             tau = d.get('tau')
@@ -86,7 +85,6 @@ if __name__ == "__main__":
     else:
         actor_lr = 3e-4
         critic_lr = 3e-3
-        num_episodes = 200
         hidden_dim = 64
         gamma = 0.98
         tau = 0.005  # 软更新参数
@@ -128,7 +126,7 @@ if __name__ == "__main__":
         distance = info.get('distance')
         done = False
         print("20 seconds sleeping after reset...")
-        time.sleep(20)
+        # time.sleep(2)
         print("waked")
 
         # while True:
@@ -181,15 +179,15 @@ if __name__ == "__main__":
 
         print(f'episode: {i_episode}, return: {episode_return}')
 
-        if i_episode % 5 == 0:
+        if i_episode % 20 == 0:
             agent.save(checkpoints_path, i_episode)
             replay_buffer.save(f"{checkpoints_path}/{i_episode}_buffer.pth")
             save_return_list(i_episode, checkpoints_path, return_list)
             save_steps_distance_list(i_episode, checkpoints_path, steps_distance_list)
 
-            parameter_keys = ['episode', 'num_episodes', 'total_iterated', 'actor_lr', 'critic_lr', 
+            parameter_keys = ['episode', 'total_iterated', 'actor_lr', 'critic_lr', 
                             'batch_size', 'tau', 'gamma', 'buffer_size', 'minimal_size', 'sigma', 'hidden_dim']
-            parameter_values = [i_episode, num_episodes, total_iterated, actor_lr, critic_lr, 
+            parameter_values = [i_episode, total_iterated, actor_lr, critic_lr, 
                                 batch_size, tau, gamma, buffer_size, minimal_size, sigma, hidden_dim]
             
             parameter_dictionary = dict(zip(parameter_keys, parameter_values))

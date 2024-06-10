@@ -11,7 +11,7 @@ import math
 #
 from geometry_msgs.msg import PoseStamped, TwistStamped, Quaternion, Twist
 
-from mavros_msgs.msg import State, ExtendedState
+from mavros_msgs.msg import State, ExtendedState, PositionTarget
 from mavros_msgs.srv import CommandBool, SetMode, CommandBoolRequest, SetModeRequest
 from std_msgs.msg import Header
 
@@ -54,7 +54,7 @@ g_destination_z = g_start_point_z
 g_max_x = 5
 g_max_y = 5
 g_max_z = 100
-g_min_z = 1
+g_min_z = 4
 
 class simulationHandler():
 
@@ -65,6 +65,7 @@ class simulationHandler():
         # 发布的话题 topic published
         self.pos = PoseStamped()        
         self.vel = TwistStamped()
+        self.raw = PositionTarget()
 
         # 订阅的话题 topic subscribed
         self.state = State()
@@ -79,6 +80,7 @@ class simulationHandler():
         # 本节点发布的话题
         self.pos_setpoint_pub = rospy.Publisher('mavros/setpoint_position/local', PoseStamped, queue_size=10)
         self.vel_setpoint_pub = rospy.Publisher('mavros/setpoint_velocity/cmd_vel', TwistStamped, queue_size=10)
+        self.raw_setpoint_pub = rospy.Publisher('mavros/setpoint_raw/local', PositionTarget, queue_size=10)
 
         # 创建服务客户端
         self.set_mode_srv = rospy.ServiceProxy('mavros/set_mode', SetMode)
@@ -86,7 +88,8 @@ class simulationHandler():
 
         # 创建新线程，专门用于发布话题
         # self.pos_thread = Thread(target=self.send_pos, args=(), name="pos_thread")
-        self.pos_thread = Thread(target=self.send_vel, args=(), name="vel_thread")
+        # self.pos_thread = Thread(target=self.send_vel, args=(), name="vel_thread")
+        self.pos_thread = Thread(target=self.send_raw, args=(), name="raw_thread")
         self.pos_thread.daemon = True
         self.pos_thread.start()
 
@@ -118,13 +121,18 @@ class simulationHandler():
             rospy.loginfo("simulationHandler failed to connect to services")
 
         self.wait_for_topics(60)
-        self.wait_for_landed_state(mavutil.mavlink.MAV_LANDED_STATE_ON_GROUND,
-                                   10, -1)
+        # self.wait_for_landed_state(mavutil.mavlink.MAV_LANDED_STATE_ON_GROUND,
+        #                            10, -1)
 
-        self.set_mode("OFFBOARD", 5)
-        self.set_arm(True, 5)
-        # self.reach_position(g_start_point_x, g_start_point_y, g_start_point_z, 10)
-        print(f"try to reach: {g_start_point_x}, {g_start_point_y}, {g_start_point_z}")
+        self.state
+        if self.state.mode != "OFFBOARD":
+            self.set_mode("OFFBOARD", 5)
+
+        if not self.state.armed:
+            self.set_arm(True, 5)
+
+        self.reach_position(g_start_point_x, g_start_point_y, g_start_point_z, 10)
+        print(f"reached start point: {g_start_point_x}, {g_start_point_y}, {g_start_point_z}")
 
         self.ready = True
         # time.sleep(5)
@@ -190,7 +198,8 @@ class simulationHandler():
                 pass
 
             elif cmd == 'setVelocity':
-                self.setVelocity(data[1], data[2])
+                # self.setVelocity(data[1], data[2])
+                self.setRaw(3, g_start_point_x, g_start_point_y, g_start_point_z, data[1], data[2], 0)
                 r_msg = self.getState()
 
             elif cmd == 'move':
@@ -256,6 +265,19 @@ class simulationHandler():
                 rate.sleep()
             except rospy.ROSInterruptException:
                 pass
+
+    def send_raw(self):
+        rate = rospy.Rate(30)
+        self.raw.header = Header()
+        self.raw.header.frame_id = "manual_raw"
+
+        while not rospy.is_shutdown():
+            self.raw.header.stamp = rospy.Time.now()
+            self.raw_setpoint_pub.publish(self.raw)
+            try:  # prevent garbage in console output when thread is killed
+                rate.sleep()
+            except rospy.ROSInterruptException:
+                pass            
 
     def moveOnce(self, cmd, margin):
         self.local_position.pose.position.z = g_start_point_z
@@ -431,6 +453,11 @@ class simulationHandler():
         self.pos.pose.position.y = g_start_point_y
         self.pos.pose.position.z = g_start_point_z
 
+    def resetVelocity(self, vx, vy):
+        self.vel.twist.linear.x = float(0)
+        self.vel.twist.linear.y = float(0)
+        self.vel.twist.linear.z = float(0.2)
+
     def setVelocity(self, vx, vy):
         self.vel.twist.linear.x = float(vx)
         self.vel.twist.linear.y = float(vy)
@@ -442,6 +469,20 @@ class simulationHandler():
             vz = -0.2
     
         self.vel.twist.linear.z = vz
+
+    def setRaw(self, mask, px, py, pz, vx, vy, vz):
+        self.raw.coordinate_frame = 1
+        self.raw.type_mask = mask   # 0: px/py/pz take effect; 3: pz/vx/vy take effect
+
+        self.raw.position.x = px
+        self.raw.position.y = py
+        self.raw.position.z = pz
+
+        self.raw.velocity.x = float(vx)
+        self.raw.velocity.y = float(vy)
+        self.raw.velocity.z = float(vz)
+
+
 
 class UAVLandingEnv(gymnasium.Env):
     def __init__(self):
@@ -533,7 +574,7 @@ class UAVLandingEnv(gymnasium.Env):
         reward  = shaping_current - self.last_shaping
         done = C
         if done:
-            done_reason = 'finish'
+            done_reason = 'succeed'
 
         self.last_position = np.array(self.position)
 
@@ -556,9 +597,9 @@ class UAVLandingEnv(gymnasium.Env):
 # ---        
         # fail reward
         if (np.abs(self.position[0]) > g_max_x or
-                np.abs(self.position[1]) > g_max_y):
+                np.abs(self.position[1]) > g_max_y or
                 # self.position[2] > g_max_z or
-                # self.position[2] < g_min_z):
+                self.position[2] < g_min_z):
             reward -= 500
             done = True
             if done and done_reason == '':
@@ -632,15 +673,17 @@ class UAVLandingEnv(gymnasium.Env):
         print("destination: ", ' '.join(f"{pos}" for pos in self.des))
 
         # self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
-        self.simHandler.set_pos()
+        # self.simHandler.set_pos()
+        # self.simHandler.resetVelocity(0, 0)
+        self.simHandler.setRaw(0, g_start_point_x, g_start_point_y, g_start_point_z, 0, 0, 0)
 
-        self.simHandler.setVelocity(0, 0)
+        # rospy.wait_for_service('/gazebo/reset_world')
+        # try:
+        #     self.reset_proxy()
+        # except rospy.ServiceException as e:
+        #     print ("@env@ /gazebo/reset_world service call failed")
 
-        rospy.wait_for_service('/gazebo/reset_world')
-        try:
-            self.reset_proxy()
-        except rospy.ServiceException as e:
-            print ("@env@ /gazebo/reset_world service call failed")
+        # self.unpause()
 
         data = self.simHandler.takeoff()
 
