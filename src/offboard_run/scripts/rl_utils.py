@@ -3,21 +3,42 @@ import numpy as np
 import torch
 import collections
 import random
+import pickle
+import json
 
 class ReplayBuffer:
     def __init__(self, capacity):
         self.buffer = collections.deque(maxlen=capacity) 
 
     def add(self, state, action, reward, next_state, done): 
+        # print(f"state'shape: {state.shape}, action's shape: {action.shape}")
         self.buffer.append((state, action, reward, next_state, done)) 
 
     def sample(self, batch_size): 
         transitions = random.sample(self.buffer, batch_size)
         state, action, reward, next_state, done = zip(*transitions)
-        return np.array(state), action, reward, np.array(next_state), done 
+        # print(f"state np'shape: {np.array(state).shape}, action np's shape: {np.array(action).shape}")
+        return np.array(state), np.array(action), reward, np.array(next_state), done 
 
     def size(self): 
         return len(self.buffer)
+    
+    def save(self, file_path):
+        with open(file_path, 'wb') as f:
+            pickle.dump(self.buffer, f)
+
+    def load(self, file_path):
+        with open(file_path, 'rb') as f:
+            self.buffer = pickle.load(f)      
+
+    def __str__(self):
+        # 将buffer中的内容转换为字符串表示
+        experiences = ['Experience ' + str(i) + ': ' + str(exp) for i, exp in enumerate(self.buffer)]
+        return '\n'.join(experiences)              
+
+    def print_buffer(self):
+        # 输出buffer的内容
+        print(self.__str__())    
 
 def moving_average(a, window_size):
     cumulative_sum = np.cumsum(np.insert(a, 0, 0)) 

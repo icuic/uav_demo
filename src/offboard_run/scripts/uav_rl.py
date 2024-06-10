@@ -14,6 +14,7 @@ sys.path.insert(0, path + "/uav_demo/src/offboard_run/scripts")
 # print(sys.path)
 import UAVGymEnv
 from dqn import *
+from ddpg import *
 import random
 import numpy as np
 import collections
@@ -57,6 +58,7 @@ if __name__ == "__main__":
 
     create_checkpoints_folder()
 
+    algorithm = 'ddpg'
     restore_from_checkpoint = False
     restore_from = 999
     episode_from = 0
@@ -70,30 +72,33 @@ if __name__ == "__main__":
             d = json.load(f)
             tmp_episode = d.get('episode')
             print(f"start from episode: {tmp_episode}")
-            
-            lr = d.get('lr')
-            num_episodes = d.get('num_episodes')            
+
+            actor_lr = d.get('actor_lr')
+            critic_lr = d.get('critic_lr')
+            num_episodes.d.get('num_episodes')
+            hidden_dim = d.get('hidden_dim')
             gamma = d.get('gamma')
-            epsilon = d.get('epsilon')
-            target_update = d.get('target_update')
+            tau = d.get('tau')
             buffer_size = d.get('buffer_size')
             minimal_size = d.get('minimal_size')
             batch_size = d.get('batch_size')
-            state_dim = d.get('state_dim')
-            action_dim = d.get('action_dim')
-            hidden_dim = d.get('hidden_dim')
+            sigma = d.get('sigma')
     else:
-        lr = 2e-3
-        num_episodes = 500
+        actor_lr = 3e-4
+        critic_lr = 3e-3
+        num_episodes = 200
+        hidden_dim = 64
         gamma = 0.98
-        epsilon = 1
-        target_update = 10
+        tau = 0.005  # 软更新参数
         buffer_size = 10000
-        minimal_size = 500
-        batch_size = 128
-        state_dim = env.observation_space.shape[0]
-        action_dim = env.action_space.n
-        hidden_dim = 128
+        minimal_size = 1000
+        batch_size = 64
+        sigma = 0.01  # 高斯噪声标准差
+
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.shape[0]
+    action_bound = env.action_space.high[0]  # 动作最大值
+
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -102,64 +107,51 @@ if __name__ == "__main__":
     # env.seed(0)
     torch.manual_seed(0)    
 
-    replay_buffer = ReplayBuffer(buffer_size)
-    if restore_from_checkpoint:
-        replay_buffer.load(f"{checkpoints_path}/{restore_from}_buffer.pth")
-        print(f"buffer size: {replay_buffer.size()}")
-
-    agent = DQN(state_dim, hidden_dim, action_dim, lr, gamma, epsilon, target_update, device)
-    if restore_from_checkpoint:
-        agent.load(checkpoints_path, restore_from)
+    replay_buffer = rl_utils.ReplayBuffer(buffer_size)
+    agent = DDPG(state_dim, hidden_dim, action_dim, action_bound, sigma, actor_lr, critic_lr, tau, gamma, device)
 
     return_list = []
     steps_distance_list = []
+
     if restore_from_checkpoint:
+        replay_buffer.load(f"{checkpoints_path}/{restore_from}_buffer.pth")       
+        agent.load(checkpoints_path, restore_from)        
         return_list = load_return_list(restore_from, checkpoints_path)
         steps_distance_list = load_steps_distance_list(restore_from, checkpoints_path)
 
-    strAction = ["x+", "x-", "y+", "y-"]
     total_iterated = 0
 
-
-    for i_episode in range(episode_from, 1500):
-        # print("--------------type s---------------")
-        # print(f"i_episode: {type(i_episode)}")
-        # print(f"num_episodes: {type(num_episodes)}")
-        # print(f"total_iterated: {type(total_iterated)}")
-        # print(f"target_update: {type(target_update)}")
-        # print(f"epsilon: {type(epsilon)}")
-        # print(f"batch_size: {type(batch_size)}")
-        # print(f"lr: {type(lr)}")
-        # print(f"gamma: {type(gamma)}")
-        # print(f"buffer_size: {type(buffer_size)}")
-        # print(f"minimal_size: {type(minimal_size)}")
-        # print(f"state_dim: {type(state_dim)}")
-        # print(f"action_dim: {type(action_dim)}")
-        # print(f"hidden_dim: {type(hidden_dim)}")
-        # print("--------------type e---------------")
-
+    for i_episode in range(episode_from, 5000):
         episode_return = 0
         distance = 0
         state, info = env.reset()
         distance = info.get('distance')
         done = False
-        time.sleep(5)
+        print("20 seconds sleeping after reset...")
+        time.sleep(20)
+        print("waked")
 
-        while True:
-            env.step(np.zeros(2))
-            time.sleep(1)
-            pass
+        # while True:
+        #     env.step(np.array([0, 0], dtype=float))
+        #     time.sleep(1)
+        #     pass
 
         print(f"{'='*20} episode: {i_episode} {'='*20}")
         i_step = 0
         while not done:                    
-            # time.sleep(1)
+            time.sleep(0.05)
             action = agent.take_action(state)
-            # action = 0
+            action = np.round(action, 2)
+            # action = np.array([0, 0], dtype=float)
+
+            # print("action type: ", type(action))
+            # print("action size: ", action.size)   
+            # print(f'action: {action}')      
+            # print(f'shape: {action.shape}')   
 
             i_step += 1
             print(f'{i_step:-^50}')
-            print(f'action is {strAction[action]}')
+            print(f'action is {action[0]}, {action[1]}')
 
             next_state, reward, done, _ = env.step(action)                    
             replay_buffer.add(state, action, reward, next_state, done)
@@ -180,41 +172,44 @@ if __name__ == "__main__":
                 agent.update(transition_dict)
                 total_iterated  += 1
 
-        epsilon *= 0.98
-        agent.set_epsilon(epsilon)
+        if algorithm != 'ddpg':
+            epsilon *= 0.98
+            agent.set_epsilon(epsilon)
+
         return_list.append(episode_return)
         steps_distance_list.append(round(i_step/distance, 2))
 
         print(f'episode: {i_episode}, return: {episode_return}')
 
-        agent.save(checkpoints_path, i_episode)
-        replay_buffer.save(f"{checkpoints_path}/{i_episode}_buffer.pth")
-        save_return_list(i_episode, checkpoints_path, return_list)
-        save_steps_distance_list(i_episode, checkpoints_path, steps_distance_list)
+        if i_episode % 20 == 0:
+            agent.save(checkpoints_path, i_episode)
+            replay_buffer.save(f"{checkpoints_path}/{i_episode}_buffer.pth")
+            save_return_list(i_episode, checkpoints_path, return_list)
+            save_steps_distance_list(i_episode, checkpoints_path, steps_distance_list)
 
-        parameter_keys = ['episode', 'num_episodes', 'total_iterated', 'target_update', 'epsilon', 
-                          'batch_size', 'lr', 'gamma', 'buffer_size', 'minimal_size', 'state_dim', 'action_dim', 'hidden_dim']
-        parameter_values = [i_episode, num_episodes, total_iterated, target_update, epsilon, 
-                            batch_size, lr, gamma, buffer_size, minimal_size, state_dim, int(action_dim), hidden_dim]
-        
-        parameter_dictionary = dict(zip(parameter_keys, parameter_values))
-        with open(f'{checkpoints_path}/{i_episode}_hyperparameter' + '.json', 'w') as outfile:
-            json.dump(parameter_dictionary, outfile)
+            parameter_keys = ['episode', 'num_episodes', 'total_iterated', 'actor_lr', 'critic_lr', 
+                            'batch_size', 'tau', 'gamma', 'buffer_size', 'minimal_size', 'sigma', 'hidden_dim']
+            parameter_values = [i_episode, num_episodes, total_iterated, actor_lr, critic_lr, 
+                                batch_size, tau, gamma, buffer_size, minimal_size, sigma, hidden_dim]
+            
+            parameter_dictionary = dict(zip(parameter_keys, parameter_values))
+            with open(f'{checkpoints_path}/{i_episode}_hyperparameter' + '.json', 'w') as outfile:
+                json.dump(parameter_dictionary, outfile)
 
     env.close()
 
 
-    episodes_list = list(range(len(return_list)))
-    plt.plot(episodes_list, return_list)
-    plt.xlabel('Episodes')
-    plt.ylabel('Returns')
-    plt.title('DQN on {}'.format(env_name))
-    plt.show()
+    # episodes_list = list(range(len(return_list)))
+    # plt.plot(episodes_list, return_list)
+    # plt.xlabel('Episodes')
+    # plt.ylabel('Returns')
+    # plt.title('DDPG on {}'.format(env_name))
+    # plt.show()
 
-    mv_return = rl_utils.moving_average(return_list, 9)
-    plt.plot(episodes_list, mv_return)
-    plt.xlabel('Episodes')
-    plt.ylabel('Returns')
-    plt.title('DQN on {}'.format(env_name))
-    plt.show()      
+    # mv_return = rl_utils.moving_average(return_list, 9)
+    # plt.plot(episodes_list, mv_return)
+    # plt.xlabel('Episodes')
+    # plt.ylabel('Returns')
+    # plt.title('DDPG on {}'.format(env_name))
+    # plt.show()      
 
