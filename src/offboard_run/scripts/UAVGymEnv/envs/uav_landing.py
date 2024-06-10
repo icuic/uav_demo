@@ -458,12 +458,12 @@ class UAVLandingEnv(gymnasium.Env):
 
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float32)
         # self.action_space = spaces.Discrete(4)  # U, D, F, B, L, R
-        self.action_space = spaces.Box(low=np.array([-1, -1]), high=np.array([-1, 1]), dtype=np.float32)
+        self.action_space = spaces.Box(low=np.array([-1, -1]), high=np.array([1, 1]), dtype=np.float32)
         self.reward_range = (-np.inf, np.inf)
 
         self._seed()
 
-        self.radius = 0.5
+        self.radius = 0.1
         self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
         self.des = [g_destination_x, g_destination_y, g_destination_z]
         self.cnt = 0
@@ -655,7 +655,7 @@ class UAVLandingEnv(gymnasium.Env):
         self.first_time_after_reset = True
         rospy.loginfo("Env is reset.")
 
-        return state, {'distance':abs(g_start_point_x-g_destination_x)+abs(g_start_point_y-g_destination_y)}
+        return np.array(state, dtype=np.float32), {'distance':abs(g_start_point_x-g_destination_x)+abs(g_start_point_y-g_destination_y)}
 
     def set_des(self, destination):
         self.des = destination
