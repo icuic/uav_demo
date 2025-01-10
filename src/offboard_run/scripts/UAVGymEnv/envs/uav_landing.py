@@ -554,59 +554,78 @@ class UAVLandingEnv(gymnasium.Env):
         old_position = np.array([self.position[0], self.position[1], self.position[2]])
 
         data = self.simHandler.operate(cmd)
-        self.position = [data[0], data[1], data[2]]
+        time.sleep(0.05)
+        data = self.simHandler.getState()
+        self.position = [round(data[i], 2) for i in range(3)]
         print("self.position: ", ' '.join(f"{pos:.2f}" for pos in self.position))
 
 
         reward = 0
         done = False
 
-
-        if self.first_time_after_reset == True:
-            self.first_time_after_reset = False
-            self.last_position = np.array(self.position)
-
-        tmp_p = np.array([self.position[i]-self.last_position[i] for i in range(2)])
-        tmp_v = np.array([(self.position[i]-self.last_position[i])/0.05 for i in range(2)])
-        C = self.cal_distence(self.position, self.des) < self.radius
-
-        shaping_current = -100*np.sqrt(tmp_p[0]**2 + tmp_p[1]**2) - 10*np.sqrt(tmp_v[0]**2 + tmp_v[1]**2) + 10*C
-        reward  = shaping_current - self.last_shaping
-        done = C
-        if done:
-            done_reason = 'succeed'
-
-        self.last_position = np.array(self.position)
-
 # ---
-        # # reward
-        # distance = self.cal_distence(self.position, self.des)
-        # if distance < self.radius:
-        #     done = True
-        #     done_reason = 'finish'
-        #     reward = reward + 100
-        # elif distance < 1:
-        #     reward -= distance
-        # elif distance < 6:
-        #     reward -= 2*distance
-        # else: # > 6
-        #     reward -= 3*distance
+        # if self.first_time_after_reset == True:
+        #     self.first_time_after_reset = False
+        #     self.last_position = np.array(self.position)
+        #     self.last_speed = np.array([action[0], action[1], 0])
+        #     print("@@ first time after reset")
 
-        # delta = self.cmp_distence(old_position, self.position, self.des)
-        # reward += delta
+        # tmp_p = np.array([self.position[i]-self.des[i] for i in range(2)])
+        # tmp_v = np.array([action[0], action[1]])
+        # tmp_a = np.array([(action[i]-self.last_speed[i])/0.05 for i in range(2)])
+        
+        # C = self.cal_distence(self.position, self.des) < self.radius
+
+
+        # print(f"@@ position: {self.position}, last_pos: {self.last_position}")
+        # print(f"@@ action: {action}, last_speed: {self.last_speed}")
+        # print(f"@@ tmp_p: {tmp_p}, tmp_v: {tmp_v}, tmp_a: {tmp_a}")
+
+        # shaping_current = -100*np.sqrt(tmp_p[0]**2 + tmp_p[1]**2) - 10*np.sqrt(tmp_v[0]**2 + tmp_v[1]**2) + 20*C #- np.sqrt(tmp_a[0]**2+tmp_a[1]**2)
+        # shaping_current = round(shaping_current, 2)
+        # print(f"@@ shaping_current: {shaping_current}")
+
+        # reward  = shaping_current - self.last_shaping
+        # reward = round(reward, 2)
+
+        # print(f"@@ reward: {reward} = {shaping_current}-{self.last_shaping}")
+
+        # done = C
+        # if done:
+        #     done_reason = 'succeed'
+
+        # self.last_position = np.array(self.position)
+        # self.last_speed = np.array([action[0], action[1]])
+        # self.last_shaping = shaping_current
+# ---
+        # reward
+        distance = self.cal_distence(self.position, self.des)
+        if distance < self.radius:
+            done = True
+            done_reason = 'finish'
+            reward += 100
+        elif distance < 1:
+            reward -= distance
+        elif distance < 6:
+            reward -= 2*distance
+        else: # > 6
+            reward -= 3*distance
+
+        delta = self.cmp_distence(old_position, self.position, self.des)
+        reward += delta
 # ---        
         # fail reward
         if (np.abs(self.position[0]) > g_max_x or
                 np.abs(self.position[1]) > g_max_y or
-                # self.position[2] > g_max_z or
+                self.position[2] > g_max_z or
                 self.position[2] < g_min_z):
-            reward -= 500
+            reward -= 50
             done = True
             if done and done_reason == '':
                 done_reason = 'out of map'
 
         self.cnt += 1
-        if self.cnt > 900:
+        if self.cnt > 300:
             done = True
             done_reason = 'timeout'
 
@@ -647,21 +666,21 @@ class UAVLandingEnv(gymnasium.Env):
         # 随机生成起飞点和目的地
         global g_start_point_x, g_start_point_y, g_start_point_z, g_destination_x, g_destination_y, g_destination_z
         
-        # g_start_point_x = round(random.uniform(-1*g_max_x, g_max_x), 1)
-        # g_start_point_y = round(random.uniform(-1*g_max_y, g_max_y), 1)
-        # g_start_point_z = g_start_point_z
-        
-        # g_destination_x = round(random.uniform(-1*g_max_x, g_max_x), 1)
-        # g_destination_y = round(random.uniform(-1*g_max_y, g_max_y), 1)
-        # g_destination_z = g_start_point_z
-
-        g_start_point_x = 2
-        g_start_point_y = 3
+        g_start_point_x = round(random.uniform(-1*g_max_x, g_max_x), 1)
+        g_start_point_y = round(random.uniform(-1*g_max_y, g_max_y), 1)
         g_start_point_z = g_start_point_z
         
-        g_destination_x = -3
-        g_destination_y = -2
+        g_destination_x = round(random.uniform(-1*g_max_x, g_max_x), 1)
+        g_destination_y = round(random.uniform(-1*g_max_y, g_max_y), 1)
         g_destination_z = g_start_point_z
+
+        # g_start_point_x = 2
+        # g_start_point_y = 3
+        # g_start_point_z = g_start_point_z
+        
+        # g_destination_x = -3
+        # g_destination_y = -2
+        # g_destination_z = g_start_point_z
 
         # g_start_point_x, g_start_point_y, g_start_point_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
         # g_destination_x, g_destination_y, g_destination_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
@@ -700,7 +719,7 @@ class UAVLandingEnv(gymnasium.Env):
         self.first_time_after_reset = True
         rospy.loginfo("Env is reset.")
 
-        return np.array(state, dtype=np.float32), {'distance':abs(g_start_point_x-g_destination_x)+abs(g_start_point_y-g_destination_y)}
+        return np.array(state, dtype=np.float32), {'distance':abs(g_start_point_x-g_destination_x)+abs(g_start_point_y-g_destination_y), 'dest':(g_destination_x, g_destination_y)}
 
     def set_des(self, destination):
         self.des = destination

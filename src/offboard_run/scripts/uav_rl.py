@@ -27,7 +27,7 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0607-1445"
+test_time = "0108-1018"
 checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
@@ -59,8 +59,8 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     algorithm = 'ddpg'
-    restore_from_checkpoint = False
-    restore_from = 25
+    restore_from_checkpoint = True
+    restore_from = 4950
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
@@ -119,11 +119,12 @@ if __name__ == "__main__":
 
     total_iterated = 0
 
-    for i_episode in range(episode_from, 5000):
+    for i_episode in range(episode_from, 50001):
         episode_return = 0
         distance = 0
         state, info = env.reset()
         distance = info.get('distance')
+        destination = info.get('dest')
         done = False
         print("20 seconds sleeping after reset...")
         # time.sleep(2)
@@ -137,7 +138,7 @@ if __name__ == "__main__":
         print(f"{'='*20} episode: {i_episode} {'='*20}")
         i_step = 0
         while not done:                    
-            time.sleep(0.05)
+            # time.sleep(0.05)
             action = agent.take_action(state)
             action = np.round(action, 2)
             # action = np.array([0, 0], dtype=float)
@@ -148,11 +149,13 @@ if __name__ == "__main__":
             # print(f'shape: {action.shape}')   
 
             i_step += 1
-            print(f'{i_step:-^50}')
+            print(f'{f"{i_episode}/{i_step}-{destination}":-^50}')
             print(f'action is {action[0]}, {action[1]}')
 
-            next_state, reward, done, _ = env.step(action)                    
-            replay_buffer.add(state, action, reward, next_state, done)
+            next_state, reward, done, _ = env.step(action)     
+            # print(f"exp: state: {state}, action: {action}, reward: {reward}, next_state: {next_state}, done: {done}")
+            # if i_step > 1:
+            #     replay_buffer.add(state, action, reward, next_state, done)
             
             state = next_state
             episode_return += reward
@@ -179,7 +182,7 @@ if __name__ == "__main__":
 
         print(f'episode: {i_episode}, return: {episode_return}')
 
-        if i_episode % 20 == 0:
+        if i_episode % 50 == 0:
             agent.save(checkpoints_path, i_episode)
             replay_buffer.save(f"{checkpoints_path}/{i_episode}_buffer.pth")
             save_return_list(i_episode, checkpoints_path, return_list)
