@@ -27,7 +27,7 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0108-1018"
+test_time = "0111-2257"
 checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
@@ -59,8 +59,8 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     algorithm = 'ddpg'
-    restore_from_checkpoint = True
-    restore_from = 4950
+    restore_from_checkpoint = False
+    restore_from = 0
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
@@ -82,6 +82,7 @@ if __name__ == "__main__":
             minimal_size = d.get('minimal_size')
             batch_size = d.get('batch_size')
             sigma = d.get('sigma')
+            total_iterated = d.get('total_iterated')
     else:
         actor_lr = 3e-4
         critic_lr = 3e-3
@@ -92,6 +93,7 @@ if __name__ == "__main__":
         minimal_size = 1000
         batch_size = 64
         sigma = 0.01  # 高斯噪声标准差
+        total_iterated = 0
 
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
@@ -117,9 +119,9 @@ if __name__ == "__main__":
         return_list = load_return_list(restore_from, checkpoints_path)
         steps_distance_list = load_steps_distance_list(restore_from, checkpoints_path)
 
-    total_iterated = 0
+    
 
-    for i_episode in range(episode_from, 50001):
+    for i_episode in range(episode_from, 20001):
         episode_return = 0
         distance = 0
         state, info = env.reset()
@@ -154,8 +156,7 @@ if __name__ == "__main__":
 
             next_state, reward, done, _ = env.step(action)     
             # print(f"exp: state: {state}, action: {action}, reward: {reward}, next_state: {next_state}, done: {done}")
-            # if i_step > 1:
-            #     replay_buffer.add(state, action, reward, next_state, done)
+            replay_buffer.add(state, action, reward, next_state, done)
             
             state = next_state
             episode_return += reward
