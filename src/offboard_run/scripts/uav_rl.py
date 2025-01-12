@@ -27,7 +27,7 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0112-1340"
+test_time = "0112-1950"
 checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
@@ -52,6 +52,14 @@ def save_steps_distance_list(i, path, steps_distance_list):
 
 def load_steps_distance_list(i, path):
     with open(f"{path}/{i}_step_distance_list.pkl", 'rb') as f:
+        return pickle.load(f)
+
+def save_reason_list(i, path, reason_list):
+    with open(f"{path}/{i}_reason_list.pkl", 'wb') as f:
+        pickle.dump(reason_list, f)
+
+def load_reason_list(i, path):
+    with open(f"{path}/{i}_reason_list.pkl", 'rb') as f:
         return pickle.load(f)
 
 if __name__ == "__main__":
@@ -111,12 +119,14 @@ if __name__ == "__main__":
     agent = DDPG(state_dim, hidden_dim, action_dim, action_bound, sigma, actor_lr, critic_lr, tau, gamma, device)
 
     return_list = []
+    reason_list = []
     steps_distance_list = []
 
     if restore_from_checkpoint:
         replay_buffer.load(f"{checkpoints_path}/{restore_from}_buffer.pth")       
         agent.load(checkpoints_path, restore_from)        
         return_list = load_return_list(restore_from, checkpoints_path)
+        reason_list = load_reason_list(restore_from, checkpoints_path)
         steps_distance_list = load_steps_distance_list(restore_from, checkpoints_path)
 
     
@@ -179,7 +189,8 @@ if __name__ == "__main__":
             agent.set_epsilon(epsilon)
 
         return_list.append(episode_return)
-        steps_distance_list.append(round(i_step/distance, 2))
+        reason_list.append(_['done_reason'])
+        # steps_distance_list.append(round(i_step/distance, 2))
 
         print(f'episode: {i_episode}, return: {episode_return}')
 
@@ -187,6 +198,7 @@ if __name__ == "__main__":
             agent.save(checkpoints_path, i_episode)
             replay_buffer.save(f"{checkpoints_path}/{i_episode}_buffer.pth")
             save_return_list(i_episode, checkpoints_path, return_list)
+            save_reason_list(i_episode, checkpoints_path, reason_list)
             save_steps_distance_list(i_episode, checkpoints_path, steps_distance_list)
 
             parameter_keys = ['episode', 'total_iterated', 'actor_lr', 'critic_lr', 

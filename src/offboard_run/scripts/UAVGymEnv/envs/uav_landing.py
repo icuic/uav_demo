@@ -551,6 +551,14 @@ class UAVLandingEnv(gymnasium.Env):
         # elif action == 4:  # stay
         #     cmd = 'stay' + '#' + str(margin)
 
+        ttt = []
+        ttt.append(self.des[0] - self.position[0])
+        ttt.append(self.des[1] - self.position[1])
+        
+        reward = 0
+        reward = self.cal_reward(ttt[:2], action[:2])   
+        # reward -= 0.1
+
         old_position = np.array([self.position[0], self.position[1], self.position[2]])
 
         data = self.simHandler.operate(cmd)
@@ -560,7 +568,7 @@ class UAVLandingEnv(gymnasium.Env):
         print("self.position: ", ' '.join(f"{pos:.2f}" for pos in self.position))
 
 
-        reward = 0
+        
         done = False
 
 # ---
@@ -615,8 +623,7 @@ class UAVLandingEnv(gymnasium.Env):
         # reward += delta
 # ---        
 
-        reward = self.cal_reward(data[:2], action[:2])   
-        # reward -= 0.1
+
 
         distance = self.cal_distence(self.position, self.des)
         if distance < self.radius:
@@ -645,9 +652,9 @@ class UAVLandingEnv(gymnasium.Env):
 
 
         # trans relative position
-        data[0] = data[0] - self.des[0]
-        data[1] = data[1] - self.des[1]
-        data[2] = data[2] - self.des[2]
+        data[0] = self.des[0] - data[0] 
+        data[1] = self.des[1] - data[1] 
+        data[2] = self.des[2] - data[2]
 
         # for idx in range(len(data)):
         #     if idx < 3:
@@ -717,9 +724,9 @@ class UAVLandingEnv(gymnasium.Env):
 
         data = self.simHandler.takeoff()
 
-        data[0] = data[0] - self.des[0]
-        data[1] = data[1] - self.des[1]
-        data[2] = data[2] - self.des[2]
+        data[0] = self.des[0] - data[0] 
+        data[1] = self.des[1] - data[1] 
+        data[2] = self.des[2] - data[2]
 
         state = data
 
@@ -764,9 +771,12 @@ class UAVLandingEnv(gymnasium.Env):
         # 计算向量 v1 和 v2 的点积
         dot_product = np.dot(v1, v2)
         # 计算夹角的余弦值
-        cos_theta = dot_product / (magnitude_v1 * magnitude_v2)
+        if magnitude_v1 * magnitude_v2 != 0:
+            cos_theta = dot_product / (magnitude_v1 * magnitude_v2)
+        else:
+            cos_theta = 0
         
-        reward_ = cos_theta * (1 / 1 + magnitude_v1 - magnitude_v2)
+        reward_ = cos_theta * (1 / (1 + abs(magnitude_v1 - magnitude_v2)))
         return reward_
 
     def close(self):
