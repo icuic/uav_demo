@@ -599,20 +599,31 @@ class UAVLandingEnv(gymnasium.Env):
         # self.last_shaping = shaping_current
 # ---
         # reward
+        # distance = self.cal_distence(self.position, self.des)
+        # if distance < self.radius:
+        #     done = True
+        #     done_reason = 'finish'
+        #     reward += 100
+        # elif distance < 1:
+        #     reward -= distance
+        # elif distance < 6:
+        #     reward -= 2*distance
+        # else: # > 6
+        #     reward -= 3*distance
+
+        # delta = self.cmp_distence(old_position, self.position, self.des)
+        # reward += delta
+# ---        
+
+        reward = self.cal_reward(data[:2], action[:2])   
+        # reward -= 0.1
+
         distance = self.cal_distence(self.position, self.des)
         if distance < self.radius:
             done = True
             done_reason = 'finish'
-            reward += 100
-        elif distance < 1:
-            reward -= distance
-        elif distance < 6:
-            reward -= 2*distance
-        else: # > 6
-            reward -= 3*distance
+            reward += 100        
 
-        delta = self.cmp_distence(old_position, self.position, self.des)
-        reward += delta
 # ---        
         # fail reward
         if (np.abs(self.position[0]) > g_max_x or
@@ -741,6 +752,22 @@ class UAVLandingEnv(gymnasium.Env):
             np.square(destination[0] - new_position[0]) + np.square(destination[1] - new_position[1]))
 
         return new_distance
+
+    def cal_reward(self, v1, v2):
+        # 将输入的列表转换为 numpy 数组
+        v1 = np.array(v1)
+        v2 = np.array(v2)
+        # 计算向量 v1 的模
+        magnitude_v1 = np.linalg.norm(v1)
+        # 计算向量 v2 的模
+        magnitude_v2 = np.linalg.norm(v2)
+        # 计算向量 v1 和 v2 的点积
+        dot_product = np.dot(v1, v2)
+        # 计算夹角的余弦值
+        cos_theta = dot_product / (magnitude_v1 * magnitude_v2)
+        
+        reward_ = cos_theta * (1 / 1 + magnitude_v1 - magnitude_v2)
+        return reward_
 
     def close(self):
         # self.simHandler.reset()
