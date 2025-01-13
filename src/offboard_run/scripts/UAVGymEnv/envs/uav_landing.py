@@ -629,12 +629,12 @@ class UAVLandingEnv(gymnasium.Env):
         if distance < self.radius:
             done = True
             done_reason = 'finish'
-            reward += 100        
+            reward += 10        
 
 # ---        
         # fail reward
-        if (np.abs(self.position[0]) > g_max_x or
-                np.abs(self.position[1]) > g_max_y or
+        if (np.abs(self.position[0]) > g_max_x+1 or
+                np.abs(self.position[1]) > g_max_y+1 or
                 self.position[2] > g_max_z or
                 self.position[2] < g_min_z):
             reward -= 50
@@ -647,7 +647,7 @@ class UAVLandingEnv(gymnasium.Env):
             done = True
             done_reason = 'timeout'
 
-        # print(f"reward (fail): {reward:.2f}")
+        
         print(f"done: {done}-({done_reason}), reward: {reward:.2f}, ")
 
 
@@ -776,7 +776,8 @@ class UAVLandingEnv(gymnasium.Env):
         else:
             cos_theta = 0
         
-        reward_ = cos_theta * (1 / (1 + abs(magnitude_v1 - magnitude_v2)))
+        # reward_ = cos_theta * (1 / (1 + abs(magnitude_v1 - magnitude_v2)))
+        reward_ = cos_theta * (1 + magnitude_v2)
         return reward_
 
     def close(self):

@@ -27,7 +27,7 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0112-1950"
+test_time = "0113-2330"
 checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
