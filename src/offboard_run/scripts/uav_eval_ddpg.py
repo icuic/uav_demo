@@ -26,13 +26,13 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0112-1950"
+test_time = "0113-2330"
 checkpoints_path = './checkpoints/'+test_time
 
 
 if __name__ == "__main__":
 
-    restore_from = 5000
+    restore_from = 7000
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
     env = gymnasium.make(env_name)
