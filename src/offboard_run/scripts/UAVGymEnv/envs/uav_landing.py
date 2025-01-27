@@ -509,11 +509,11 @@ class UAVLandingEnv(gymnasium.Env):
         self.des = [g_destination_x, g_destination_y, g_destination_z]
         self.cnt = 0
 
-        self.first_time_after_reset = True
+        # self.first_time_after_reset = True
         
-        self.last_position = np.zeros(3, dtype=float) # poistion in last step
-        self.last_speed = np.zeros(3, dtype=float)
-        self.last_shaping = 0
+        # self.last_position = np.zeros(3, dtype=float) # poistion in last step
+        # self.last_speed = np.zeros(3, dtype=float)
+        # self.last_shaping = 0
 
 
         rospy.loginfo("Environment is ready.")
@@ -714,6 +714,9 @@ class UAVLandingEnv(gymnasium.Env):
         # self.simHandler.resetVelocity(0, 0)
         self.simHandler.setRaw(0, g_start_point_x, g_start_point_y, g_start_point_z, 0, 0, 0)
 
+        # 移动降落平台至目的地
+        # to_do        
+
         # rospy.wait_for_service('/gazebo/reset_world')
         # try:
         #     self.reset_proxy()
@@ -734,7 +737,7 @@ class UAVLandingEnv(gymnasium.Env):
         #     state = np.zeros([len(state)])
 
         self.cnt = 0
-        self.first_time_after_reset = True
+        # self.first_time_after_reset = True
         rospy.loginfo("Env is reset.")
 
         return np.array(state, dtype=np.float32), {'distance':abs(g_start_point_x-g_destination_x)+abs(g_start_point_y-g_destination_y), 'dest':(g_destination_x, g_destination_y)}
@@ -754,12 +757,14 @@ class UAVLandingEnv(gymnasium.Env):
 
         return old_distance - new_distance
 
+    # 计算当前位置与目标位置的距离
     def cal_distence(self, new_position, destination):
         new_distance = np.sqrt(
             np.square(destination[0] - new_position[0]) + np.square(destination[1] - new_position[1]))
 
         return new_distance
 
+    # 计算奖励
     def cal_reward(self, v1, v2):
         # 将输入的列表转换为 numpy 数组
         v1 = np.array(v1)
