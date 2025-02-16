@@ -15,6 +15,8 @@ from mavros_msgs.msg import State, ExtendedState, PositionTarget
 from mavros_msgs.srv import CommandBool, SetMode, CommandBoolRequest, SetModeRequest
 from std_msgs.msg import Header
 
+from gazebo_msgs.msg import ModelStates
+
 from threading import Thread
 from pymavlink import mavutil
 
@@ -490,10 +492,13 @@ class UAVLandingEnv(gymnasium.Env):
         rospy.init_node("offb_test")
 
         rospy.wait_for_service('/gazebo/unpause_physics', 30)
+        rospy.wait_for_message('/gazebo/model_states', 30)
 
         self.unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
         self.pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
         self.reset_proxy = rospy.ServiceProxy('/gazebo/reset_world', Empty)
+
+        rospy.Subscriber('/gazebo/model_states', ModelStates, self.model_states_callback)
 
         self.simHandler = simulationHandler()
 
@@ -506,7 +511,7 @@ class UAVLandingEnv(gymnasium.Env):
 
         self.radius = 0.1
         self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
-        self.des = [g_destination_x, g_destination_y, g_destination_z]
+        self.des = [None, None, None]
         self.cnt = 0
 
         self.first_time_after_reset = True
@@ -519,6 +524,25 @@ class UAVLandingEnv(gymnasium.Env):
         rospy.loginfo("Environment is ready.")
 
         time.sleep(5)
+
+    def model_states_callback(self, msg):
+        try:
+            # 查找 landing_area 模型的索引
+            model_index = msg.name.index("landing_area")
+            
+            # 提取 landing_area 的位置信息
+            position = msg.pose[model_index].position
+            
+            # 将位置信息添加到列表中
+            self.des.append((position.x, position.y, position.z))
+            
+            # 打印位置信息
+            # rospy.loginfo(f"Position of landing_area: x={landing_area_position.x}, y={landing_area_position.y}, z={landing_area_position.z}")
+
+        except ValueError:
+            # 如果找不到 landing_area 模型
+            rospy.logwarn("Model 'landing_area' not found in the list of models.")        
+
 
     def step(self, action):        
         rospy.wait_for_service('/gazebo/unpause_physics')
