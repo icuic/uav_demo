@@ -490,6 +490,7 @@ class UAVLandingEnv(gymnasium.Env):
         rospy.init_node("offb_test")
 
         rospy.wait_for_service('/gazebo/unpause_physics', 30)
+        rospy.wait_for_message
 
         self.unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
         self.pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
