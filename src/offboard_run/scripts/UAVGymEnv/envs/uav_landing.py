@@ -15,9 +15,10 @@ from mavros_msgs.msg import State, ExtendedState, PositionTarget
 from mavros_msgs.srv import CommandBool, SetMode, CommandBoolRequest, SetModeRequest
 from std_msgs.msg import Header
 
-from gazebo_msgs.msg import ModelStates
+from gazebo_msgs.msg import ModelStates, ModelState
 
-from threading import Thread
+from threading import Thread, Event as ThreadingEvent
+
 from pymavlink import mavutil
 
 from tf.transformations import quaternion_from_euler
@@ -492,13 +493,18 @@ class UAVLandingEnv(gymnasium.Env):
         rospy.init_node("offb_test")
 
         rospy.wait_for_service('/gazebo/unpause_physics', 30)
-        rospy.wait_for_message('/gazebo/model_states', 30)
+        rospy.wait_for_message('/gazebo/model_states', ModelStates, timeout=30)
 
         self.unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
         self.pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
         self.reset_proxy = rospy.ServiceProxy('/gazebo/reset_world', Empty)
 
-        rospy.Subscriber('/gazebo/model_states', ModelStates, self.model_states_callback)
+        # rospy.Subscriber('/gazebo/model_states', ModelStates, self.model_states_callback)
+        
+        # 移动 landing_area 模型
+        self.landing_area_pub = rospy.Publisher('gazebo/set_model_state', ModelState, queue_size=10)
+        self.landing_area_msg = ModelState()    
+        self.stop_event = ThreadingEvent()
 
         self.simHandler = simulationHandler()
 
@@ -511,8 +517,10 @@ class UAVLandingEnv(gymnasium.Env):
 
         self.radius = 0.1
         self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
-        self.des = [None, None, None]
+        self.des = [3, 3, 0]
         self.cnt = 0
+
+        rospy.Subscriber('/gazebo/model_states', ModelStates, self.model_states_callback)
 
         # self.first_time_after_reset = True
         
@@ -534,7 +542,8 @@ class UAVLandingEnv(gymnasium.Env):
             position = msg.pose[model_index].position
             
             # 将位置信息添加到列表中
-            self.des.append((position.x, position.y, position.z))
+            self.des.clear()
+            self.des.extend((position.x, position.y, 5))
             
             # 打印位置信息
             # rospy.loginfo(f"Position of landing_area: x={landing_area_position.x}, y={landing_area_position.y}, z={landing_area_position.z}")
@@ -671,7 +680,13 @@ class UAVLandingEnv(gymnasium.Env):
             done = True
             done_reason = 'timeout'
 
-        
+        # 如果降落任务完成或超时，就杀掉子线程，停止移动降落平台
+        if done:
+            self.stop_event.set()
+            self.landing_area_thread.join()
+
+        # print("current destination: ", ' '.join(f"{pos}" for pos in self.des))
+        print("landing area: ", " ".join(f"{num:.2f}" for num in self.des[:3]))
         print(f"done: {done}-({done_reason}), reward: {reward:.2f}, ")
 
 
@@ -712,17 +727,17 @@ class UAVLandingEnv(gymnasium.Env):
         g_start_point_y = round(random.uniform(-1*g_max_y, g_max_y), 1)
         g_start_point_z = g_start_point_z
         
-        g_destination_x = round(random.uniform(-1*g_max_x, g_max_x), 1)
-        g_destination_y = round(random.uniform(-1*g_max_y, g_max_y), 1)
-        g_destination_z = g_start_point_z
+        # g_destination_x = round(random.uniform(-1*g_max_x, g_max_x), 1)
+        # g_destination_y = round(random.uniform(-1*g_max_y, g_max_y), 1)
+        # g_destination_z = g_start_point_z
 
         # g_start_point_x = 2
         # g_start_point_y = 3
         # g_start_point_z = g_start_point_z
         
-        # g_destination_x = -3
-        # g_destination_y = -2
-        # g_destination_z = g_start_point_z
+        g_destination_x = 3
+        g_destination_y = 3
+        g_destination_z = g_start_point_z
 
         # g_start_point_x, g_start_point_y, g_start_point_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
         # g_destination_x, g_destination_y, g_destination_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
@@ -739,7 +754,14 @@ class UAVLandingEnv(gymnasium.Env):
         self.simHandler.setRaw(0, g_start_point_x, g_start_point_y, g_start_point_z, 0, 0, 0)
 
         # 移动降落平台至目的地
-        # to_do        
+        # 改变模型pose
+    
+        # 创建新线程，专门用于发布话题
+        self.landing_area_thread = Thread(target=self.move_landing_area, args=(), name="move_landing_area_thread")
+        self.landing_area_thread.daemon = True
+        self.landing_area_thread.start()     
+        self.direction = -1  # 运动方向，1 表示从 (0, 0) 到 (3, 3)，-1 表示从 (3, 3) 到 (0, 0)
+        self.stop_event.clear()
 
         # rospy.wait_for_service('/gazebo/reset_world')
         # try:
@@ -765,6 +787,37 @@ class UAVLandingEnv(gymnasium.Env):
         rospy.loginfo("Env is reset.")
 
         return np.array(state, dtype=np.float32), {'distance':abs(g_start_point_x-g_destination_x)+abs(g_start_point_y-g_destination_y), 'dest':(g_destination_x, g_destination_y)}
+
+    def move_landing_area(self, options=None):
+        self.landing_area_msg.model_name = 'landing_area'
+        frq = 30
+        rate = rospy.Rate(frq)
+
+        print("rate.to_sec()=", frq)
+
+        speed = 0.8  # 运动速度
+        direction = -1
+        self.landing_area_msg.pose.position.x = 3
+        self.landing_area_msg.pose.position.y = 3
+        self.landing_area_msg.pose.position.z = 0
+
+        if options == None:
+            while not self.stop_event.is_set():
+                if direction == 1:  # 从 (0, 0) 到 (3, 3) 运动
+                    if self.landing_area_msg.pose.position.x < 3:
+                        self.landing_area_msg.pose.position.x += speed / frq
+                        self.landing_area_msg.pose.position.y += speed / frq
+                    else:
+                        direction = -1  # 到达 (3, 3)，改变运动方向
+                else:  # 从 (3, 3) 到 (0, 0) 运动
+                    if self.landing_area_msg.pose.position.x > 0:
+                        self.landing_area_msg.pose.position.x -= speed / frq
+                        self.landing_area_msg.pose.position.y -= speed / frq
+                    else:
+                        direction = 1  # 到达 (0, 0)，改变运动方向
+
+                self.landing_area_pub.publish(self.landing_area_msg)
+                rate.sleep()
 
     def set_des(self, destination):
         self.des = destination

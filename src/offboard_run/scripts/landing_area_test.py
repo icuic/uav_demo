@@ -17,14 +17,14 @@ def pose_publish():
     while not rospy.is_shutdown():
         # 直线轨迹
         # pose_msg.pose.position.x += 0.3 / 30     
-        pose_msg.pose.position.y += 0.3 / 30
+        # pose_msg.pose.position.y += 0.3 / 30
 
         # 圆形轨迹
-        # pose_msg.pose.position.x = radius * math.cos(angle * math.pi / 180)
-        # pose_msg.pose.position.y = radius * math.sin(angle * math.pi / 180)
-        # angle = angle + (vel / radius) * 180 / (math.pi * 30)
-        # if(angle == 360):
-        #     angle = 0
+        pose_msg.pose.position.x = radius * math.cos(angle * math.pi / 180)
+        pose_msg.pose.position.y = radius * math.sin(angle * math.pi / 180)
+        angle = angle + (vel / radius) * 180 / (math.pi * 30)
+        if(angle >= 360):
+            angle = 0
 
         # 固定位置
         # pose_msg.pose.position.x = 0

@@ -68,7 +68,7 @@ if __name__ == "__main__":
         out = 0
         timeout = 0
 
-        for i_episode in range(0, 5000+1):
+        for i_episode in range(0, 100):
             state, info = env.reset()
             done = False
 
