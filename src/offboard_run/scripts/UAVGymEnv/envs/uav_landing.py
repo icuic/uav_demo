@@ -517,7 +517,7 @@ class UAVLandingEnv(gymnasium.Env):
 
         self.radius = 0.1
         self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
-        self.des = [3, 3, 0]
+        self.des = [3, 3, 1]
         self.cnt = 0
 
         rospy.Subscriber('/gazebo/model_states', ModelStates, self.model_states_callback)
@@ -543,7 +543,7 @@ class UAVLandingEnv(gymnasium.Env):
             
             # 将位置信息添加到列表中
             self.des.clear()
-            self.des.extend((position.x, position.y, 5))
+            self.des.extend((position.x, position.y, 1))
             
             # 打印位置信息
             # rospy.loginfo(f"Position of landing_area: x={landing_area_position.x}, y={landing_area_position.y}, z={landing_area_position.z}")
@@ -563,6 +563,14 @@ class UAVLandingEnv(gymnasium.Env):
         done_reason = ''
         cmd = ''
         margin = 0.3
+
+        ttt = []
+        ttt.append(self.des[0] - self.position[0])
+        ttt.append(self.des[1] - self.position[1])
+        ttt.append(self.des[2] - self.position[2])
+
+        # 启发式更新Z轴速度
+        vz, _height, _dist = self.calculate_velocity(ttt)
 
         if type(action) == np.ndarray:
             if action.size == 3:
@@ -584,9 +592,7 @@ class UAVLandingEnv(gymnasium.Env):
         # elif action == 4:  # stay
         #     cmd = 'stay' + '#' + str(margin)
 
-        ttt = []
-        ttt.append(self.des[0] - self.position[0])
-        ttt.append(self.des[1] - self.position[1])
+
         
         reward = 0
         reward = self.cal_reward(ttt[:2], action[:2])   
@@ -598,65 +604,14 @@ class UAVLandingEnv(gymnasium.Env):
         time.sleep(0.05)
         data = self.simHandler.getState()
         self.position = [round(data[i], 2) for i in range(3)]
+
         print("self.position: ", ' '.join(f"{pos:.2f}" for pos in self.position))
-
-
+        print("landing area: ", " ".join(f"{num:.2f}" for num in self.des[:3]))
+        print(f"height: {_height:.2f}, dist: {_dist:.2f}")
+        print("action: ", ' '.join(f"{v:.2f}" for v in (action[0], action[1], vz)))
+        print("---")
         
         done = False
-
-# ---
-        # if self.first_time_after_reset == True:
-        #     self.first_time_after_reset = False
-        #     self.last_position = np.array(self.position)
-        #     self.last_speed = np.array([action[0], action[1], 0])
-        #     print("@@ first time after reset")
-
-        # tmp_p = np.array([self.position[i]-self.des[i] for i in range(2)])
-        # tmp_v = np.array([action[0], action[1]])
-        # tmp_a = np.array([(action[i]-self.last_speed[i])/0.05 for i in range(2)])
-        
-        # C = self.cal_distence(self.position, self.des) < self.radius
-
-
-        # print(f"@@ position: {self.position}, last_pos: {self.last_position}")
-        # print(f"@@ action: {action}, last_speed: {self.last_speed}")
-        # print(f"@@ tmp_p: {tmp_p}, tmp_v: {tmp_v}, tmp_a: {tmp_a}")
-
-        # shaping_current = -100*np.sqrt(tmp_p[0]**2 + tmp_p[1]**2) - 10*np.sqrt(tmp_v[0]**2 + tmp_v[1]**2) + 20*C #- np.sqrt(tmp_a[0]**2+tmp_a[1]**2)
-        # shaping_current = round(shaping_current, 2)
-        # print(f"@@ shaping_current: {shaping_current}")
-
-        # reward  = shaping_current - self.last_shaping
-        # reward = round(reward, 2)
-
-        # print(f"@@ reward: {reward} = {shaping_current}-{self.last_shaping}")
-
-        # done = C
-        # if done:
-        #     done_reason = 'succeed'
-
-        # self.last_position = np.array(self.position)
-        # self.last_speed = np.array([action[0], action[1]])
-        # self.last_shaping = shaping_current
-# ---
-        # reward
-        # distance = self.cal_distence(self.position, self.des)
-        # if distance < self.radius:
-        #     done = True
-        #     done_reason = 'finish'
-        #     reward += 100
-        # elif distance < 1:
-        #     reward -= distance
-        # elif distance < 6:
-        #     reward -= 2*distance
-        # else: # > 6
-        #     reward -= 3*distance
-
-        # delta = self.cmp_distence(old_position, self.position, self.des)
-        # reward += delta
-# ---        
-
-
 
         distance = self.cal_distence(self.position, self.des)
         if distance < self.radius:
@@ -668,8 +623,7 @@ class UAVLandingEnv(gymnasium.Env):
         # fail reward
         if (np.abs(self.position[0]) > g_max_x+1 or
                 np.abs(self.position[1]) > g_max_y+1 or
-                self.position[2] > g_max_z or
-                self.position[2] < g_min_z):
+                self.position[2] > g_max_z):
             reward -= 50
             done = True
             if done and done_reason == '':
@@ -685,15 +639,16 @@ class UAVLandingEnv(gymnasium.Env):
             self.stop_event.set()
             self.landing_area_thread.join()
 
-        # print("current destination: ", ' '.join(f"{pos}" for pos in self.des))
-        print("landing area: ", " ".join(f"{num:.2f}" for num in self.des[:3]))
+
+        
         print(f"done: {done}-({done_reason}), reward: {reward:.2f}, ")
 
 
         # trans relative position
         data[0] = self.des[0] - data[0] 
         data[1] = self.des[1] - data[1] 
-        data[2] = self.des[2] - data[2]
+        # data[2] = self.des[2] - data[2]
+        data[2] = 5 - data[2]
 
         # for idx in range(len(data)):
         #     if idx < 3:
@@ -737,7 +692,7 @@ class UAVLandingEnv(gymnasium.Env):
         
         g_destination_x = 3
         g_destination_y = 3
-        g_destination_z = g_start_point_z
+        g_destination_z = 1
 
         # g_start_point_x, g_start_point_y, g_start_point_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
         # g_destination_x, g_destination_y, g_destination_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
@@ -775,7 +730,9 @@ class UAVLandingEnv(gymnasium.Env):
 
         data[0] = self.des[0] - data[0] 
         data[1] = self.des[1] - data[1] 
-        data[2] = self.des[2] - data[2]
+        # data[2] = self.des[2] - data[2]
+        # 为方便仿真，假设降落平台的高度为1米
+        data[2] = self.des[2] - data[2]      
 
         state = data
 
@@ -795,7 +752,7 @@ class UAVLandingEnv(gymnasium.Env):
 
         print("rate.to_sec()=", frq)
 
-        speed = 0.8  # 运动速度
+        speed = 0.5  # 运动速度
         direction = -1
         self.landing_area_msg.pose.position.x = 3
         self.landing_area_msg.pose.position.y = 3
@@ -816,7 +773,7 @@ class UAVLandingEnv(gymnasium.Env):
                     else:
                         direction = 1  # 到达 (0, 0)，改变运动方向
 
-                self.landing_area_pub.publish(self.landing_area_msg)
+                # self.landing_area_pub.publish(self.landing_area_msg)
                 rate.sleep()
 
     def set_des(self, destination):
@@ -837,7 +794,7 @@ class UAVLandingEnv(gymnasium.Env):
     # 计算当前位置与目标位置的距离
     def cal_distence(self, new_position, destination):
         new_distance = np.sqrt(
-            np.square(destination[0] - new_position[0]) + np.square(destination[1] - new_position[1]))
+            np.square(destination[0] - new_position[0]) + np.square(destination[1] - new_position[1]) + np.square(destination[2] - new_position[2]))
 
         return new_distance
 
@@ -870,3 +827,34 @@ class UAVLandingEnv(gymnasium.Env):
     def _seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
+
+    def calculate_velocity(self, state):
+        x_distance = state[0]
+        y_distance = state[1]
+        height = state[2]
+        ret = 0
+        # 计算 xy 平面的距离
+        dist = math.sqrt(x_distance ** 2 + y_distance ** 2)
+        if 0 < dist < 0.8:
+            if 0 <= abs(height) <= 0.1:
+                ret = 0
+            elif 0.1 < abs(height) <= 3.5:
+                ret = 0.5 * height
+            elif abs(height) > 3.5:
+                ret = 0.5 * height
+        elif 0.8 <= dist <= 4:
+            if 0 <= abs(height) <= 0.1:
+                ret = 0.5 * height
+            elif 0.1 < abs(height) <= 3.5:
+                ret = 0.5 * height
+            elif abs(height) > 3.5:
+                ret = 0.5 * height
+        elif dist > 4:
+            if 0 <= abs(height) <= 0.1:
+                ret = -1
+            elif 0.1 < abs(height) <= 3.5:
+                ret = -1
+            elif abs(height) > 3.5:
+                ret = 0
+
+        return ret, height, dist
