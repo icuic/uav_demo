@@ -202,7 +202,7 @@ class simulationHandler():
 
             elif cmd == 'setVelocity':
                 # self.setVelocity(data[1], data[2])
-                self.setRaw(3, g_start_point_x, g_start_point_y, g_start_point_z, data[1], data[2], 0)
+                self.setRaw(4039, g_start_point_x, g_start_point_y, g_start_point_z, data[1], data[2], data[3])
                 r_msg = self.getState()
 
             elif cmd == 'move':
@@ -475,7 +475,7 @@ class simulationHandler():
 
     def setRaw(self, mask, px, py, pz, vx, vy, vz):
         self.raw.coordinate_frame = 1
-        self.raw.type_mask = mask   # 0: px/py/pz take effect; 3: pz/vx/vy take effect
+        self.raw.type_mask = mask   # 0: px/py/pz take effect; 3: pz/vx/vy take effect, 4039: vx/vy/vz take effect
 
         self.raw.position.x = px
         self.raw.position.y = py
@@ -543,7 +543,7 @@ class UAVLandingEnv(gymnasium.Env):
             
             # 将位置信息添加到列表中
             self.des.clear()
-            self.des.extend((position.x, position.y, 1))
+            self.des.extend((position.x, position.y, 5))
             
             # 打印位置信息
             # rospy.loginfo(f"Position of landing_area: x={landing_area_position.x}, y={landing_area_position.y}, z={landing_area_position.z}")
@@ -567,7 +567,7 @@ class UAVLandingEnv(gymnasium.Env):
         ttt = []
         ttt.append(self.des[0] - self.position[0])
         ttt.append(self.des[1] - self.position[1])
-        ttt.append(self.des[2] - self.position[2])
+        ttt.append(1 - self.position[2])
 
         # 启发式更新Z轴速度
         vz, _height, _dist = self.calculate_velocity(ttt)
@@ -576,7 +576,7 @@ class UAVLandingEnv(gymnasium.Env):
             if action.size == 3:
                 cmd = f'move#{action[0]}#{action[1]}#{action[2]}'
             elif action.size == 2:
-                cmd = f'setVelocity#{action[0]}#{action[1]}'
+                cmd = f'setVelocity#{action[0]}#{action[1]}#{vz}'
         elif action == 0:  # xPlus
             cmd = 'moveXPlus' + '#' + str(margin)
         elif action == 1:  # xMin
@@ -614,7 +614,8 @@ class UAVLandingEnv(gymnasium.Env):
         done = False
 
         distance = self.cal_distence(self.position, self.des)
-        if distance < self.radius:
+        # if distance < self.radius and abs(_height) < 0.5:
+        if distance < 0.5 and abs(_height) < 0.5:
             done = True
             done_reason = 'finish'
             reward += 10        
@@ -630,7 +631,7 @@ class UAVLandingEnv(gymnasium.Env):
                 done_reason = 'out of map'
 
         self.cnt += 1
-        if self.cnt > 300:
+        if self.cnt > 600:
             done = True
             done_reason = 'timeout'
 
@@ -647,8 +648,7 @@ class UAVLandingEnv(gymnasium.Env):
         # trans relative position
         data[0] = self.des[0] - data[0] 
         data[1] = self.des[1] - data[1] 
-        # data[2] = self.des[2] - data[2]
-        data[2] = 5 - data[2]
+        data[2] = self.des[2] - data[2]
 
         # for idx in range(len(data)):
         #     if idx < 3:
@@ -752,7 +752,7 @@ class UAVLandingEnv(gymnasium.Env):
 
         print("rate.to_sec()=", frq)
 
-        speed = 0.5  # 运动速度
+        speed = 0.2  # 运动速度
         direction = -1
         self.landing_area_msg.pose.position.x = 3
         self.landing_area_msg.pose.position.y = 3
@@ -773,7 +773,7 @@ class UAVLandingEnv(gymnasium.Env):
                     else:
                         direction = 1  # 到达 (0, 0)，改变运动方向
 
-                # self.landing_area_pub.publish(self.landing_area_msg)
+                self.landing_area_pub.publish(self.landing_area_msg)
                 rate.sleep()
 
     def set_des(self, destination):
@@ -794,7 +794,8 @@ class UAVLandingEnv(gymnasium.Env):
     # 计算当前位置与目标位置的距离
     def cal_distence(self, new_position, destination):
         new_distance = np.sqrt(
-            np.square(destination[0] - new_position[0]) + np.square(destination[1] - new_position[1]) + np.square(destination[2] - new_position[2]))
+            # np.square(destination[0] - new_position[0]) + np.square(destination[1] - new_position[1]) + np.square(destination[2] - new_position[2]))
+            np.square(destination[0] - new_position[0]) + np.square(destination[1] - new_position[1]))
 
         return new_distance
 
@@ -850,11 +851,11 @@ class UAVLandingEnv(gymnasium.Env):
             elif abs(height) > 3.5:
                 ret = 0.5 * height
         elif dist > 4:
-            if 0 <= abs(height) <= 0.1:
-                ret = -1
-            elif 0.1 < abs(height) <= 3.5:
-                ret = -1
-            elif abs(height) > 3.5:
+            # if 0 <= abs(height) <= 0.1:
+            #     ret = -1
+            # elif 0.1 < abs(height) <= 3.5:
+            #     ret = -1
+            # elif abs(height) > 3.5:
                 ret = 0
 
         return ret, height, dist
