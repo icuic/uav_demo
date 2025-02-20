@@ -801,7 +801,7 @@ class UAVLandingEnv(gymnasium.Env):
                     else:
                         direction = 1  # 到达 (0, 0)，改变运动方向
 
-                # self.landing_area_pub.publish(self.landing_area_msg)
+                self.landing_area_pub.publish(self.landing_area_msg)
                 rate.sleep()
 
     def set_des(self, destination):
