@@ -174,6 +174,8 @@ class simulationHandler():
     def operate(self, command):
         try:
             data = command.split('#')
+            # print("333", *data)
+
             # print('@ctrl_server@ get cmd ' + str(data))
             # get cmd content
             cmd = data[0]
@@ -202,7 +204,26 @@ class simulationHandler():
 
             elif cmd == 'setVelocity':
                 # self.setVelocity(data[1], data[2])
-                self.setRaw(4039, g_start_point_x, g_start_point_y, g_start_point_z, data[1], data[2], data[3])
+                # data[0]: 'setVelocity'
+                # data[1]: vx
+                # data[2]: vy
+                # data[3]: True: data[4] is pz, False: data[4] is vz
+                # data[4]: pz or vz
+
+                # print("444", data[4])
+                mask = 0    # 4088: px,py,pz only, 4067: pz,vx,vy only, 4039: vx,vy,vz only
+                if data[3] == "True":
+                    mask = 4067
+                    data[4] = 5
+                else:
+                    mask = 4039
+
+                # print(type(data[3]))
+                # print(data[3])
+                # print("555", data[4])
+
+                # print(f"mask: {mask}, pos: {data[3]}, data[4]: {data[4]}")
+                self.setRaw(mask, g_start_point_x, g_start_point_y, g_start_point_z, data[1], data[2], data[4])
                 r_msg = self.getState()
 
             elif cmd == 'move':
@@ -571,12 +592,19 @@ class UAVLandingEnv(gymnasium.Env):
 
         # 启发式更新Z轴速度
         vz, _height, _dist = self.calculate_velocity(ttt)
+        # print(f"111: {vz}")
+        
+        pos_v = False
+        if _dist > 1:
+            pos_v = True
+            vz = 5
 
         if type(action) == np.ndarray:
             if action.size == 3:
                 cmd = f'move#{action[0]}#{action[1]}#{action[2]}'
             elif action.size == 2:
-                cmd = f'setVelocity#{action[0]}#{action[1]}#{vz}'
+                # print(f"222: {vz}")
+                cmd = f'setVelocity#{action[0]}#{action[1]}#{pos_v}#{vz}'
         elif action == 0:  # xPlus
             cmd = 'moveXPlus' + '#' + str(margin)
         elif action == 1:  # xMin
@@ -773,7 +801,7 @@ class UAVLandingEnv(gymnasium.Env):
                     else:
                         direction = 1  # 到达 (0, 0)，改变运动方向
 
-                self.landing_area_pub.publish(self.landing_area_msg)
+                # self.landing_area_pub.publish(self.landing_area_msg)
                 rate.sleep()
 
     def set_des(self, destination):
@@ -836,26 +864,34 @@ class UAVLandingEnv(gymnasium.Env):
         ret = 0
         # 计算 xy 平面的距离
         dist = math.sqrt(x_distance ** 2 + y_distance ** 2)
-        if 0 < dist < 0.8:
+        # if 0 < dist < 0.8:
+        #     if 0 <= abs(height) <= 0.1:
+        #         ret = 0
+        #     elif 0.1 < abs(height) <= 3.5:
+        #         ret = 0.5 * height
+        #     elif abs(height) > 3.5:
+        #         ret = 0.5 * height
+        # elif 0.8 <= dist <= 4:
+        #     if 0 <= abs(height) <= 0.1:
+        #         ret = 0.5 * height
+        #     elif 0.1 < abs(height) <= 3.5:
+        #         ret = 0.5 * height
+        #     elif abs(height) > 3.5:
+        #         ret = 0.5 * height
+        # elif dist > 4:
+        #     if 0 <= abs(height) <= 0.1:
+        #         ret = -1
+        #     elif 0.1 < abs(height) <= 3.5:
+        #         ret = -1
+        #     elif abs(height) > 3.5:
+        #         ret = 0
+
+        if 0 < dist < 1:
             if 0 <= abs(height) <= 0.1:
                 ret = 0
             elif 0.1 < abs(height) <= 3.5:
                 ret = 0.5 * height
             elif abs(height) > 3.5:
                 ret = 0.5 * height
-        elif 0.8 <= dist <= 4:
-            if 0 <= abs(height) <= 0.1:
-                ret = 0.5 * height
-            elif 0.1 < abs(height) <= 3.5:
-                ret = 0.5 * height
-            elif abs(height) > 3.5:
-                ret = 0.5 * height
-        elif dist > 4:
-            # if 0 <= abs(height) <= 0.1:
-            #     ret = -1
-            # elif 0.1 < abs(height) <= 3.5:
-            #     ret = -1
-            # elif abs(height) > 3.5:
-                ret = 0
 
         return ret, height, dist
