@@ -25,6 +25,7 @@ from datetime import datetime
 import time
 import json
 import rl_utils as rl_utils
+import argparse
 
 test_time = "0113-2330"
 checkpoints_path = './checkpoints/'+test_time
@@ -32,10 +33,22 @@ checkpoints_path = './checkpoints/'+test_time
 
 if __name__ == "__main__":
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--motion-type', type=str, 
+                        choices=['static', 'linear', 'circular', 'random'], 
+                        default='linear', 
+                        help="移动平台运动类型: 静止/匀速直线/匀速圆周/随机")
+    parser.add_argument('--speed', type=float, default=0.2, 
+                        help="移动平台速度 (最大0.8 m/s)")
+    args = parser.parse_args()
+
+    # 确保速度不超过0.8
+    args.speed = min(args.speed, 0.8)
+
     restore_from = 7000
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
-    env = gymnasium.make(env_name)
+    env = gymnasium.make(env_name, motion_type=args.motion_type, speed=args.speed)
 
     with open(f"{checkpoints_path}/{restore_from}_hyperparameter.json") as f:
         d = json.load(f)

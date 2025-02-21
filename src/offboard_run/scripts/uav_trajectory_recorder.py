@@ -120,7 +120,9 @@ class DroneAndPlatformTrajectoryRecorder:
         json_drone_trajectories = [[list(point) for point in trajectory] for trajectory in self.drone_all_trajectories]
         json_platform_trajectories = [[list(point) for point in trajectory] for trajectory in self.platform_all_trajectories]
 
+        # 合并元数据
         data = {
+            "metadata": getattr(self, 'metadata', {}),  # 从外部传入的元数据
             "drone_trajectories": json_drone_trajectories,
             "platform_trajectories": json_platform_trajectories
         }
@@ -236,7 +238,7 @@ class DroneAndPlatformTrajectoryRecorder:
                         x_coords = [point[1] for point in trajectory]
                         y_coords = [point[2] for point in trajectory]
                         z_coords = [point[3] for point in trajectory]
-                        ax.plot(x_coords, y_coords, z_coords, marker='o', linestyle='-', color='b', label=f'Drone Trajectory {index + 1}')
+                        ax.plot(x_coords, y_coords, z_coords, linestyle='-', color='b', label=f'Drone Trajectory {index + 1}')
 
                 for index in platform_selected_indices:
                     trajectory = platform_trajectories[index]
@@ -244,7 +246,7 @@ class DroneAndPlatformTrajectoryRecorder:
                         x_coords = [point[1] for point in trajectory]
                         y_coords = [point[2] for point in trajectory]
                         z_coords = [point[3] for point in trajectory]
-                        ax.plot(x_coords, y_coords, z_coords, marker='s', linestyle='--', color='r', label=f'Platform Trajectory {index + 1}')
+                        ax.plot(x_coords, y_coords, z_coords, linestyle='-', color='r', label=f'Platform Trajectory {index + 1}')
 
                 ax.set_xlabel('X (m)')
                 ax.set_ylabel('Y (m)')

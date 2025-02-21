@@ -27,6 +27,7 @@ from uav_trajectory_recorder import DroneAndPlatformTrajectoryRecorder
 
 
 import time
+from datetime import datetime
 import random
 
 import subprocess
@@ -509,7 +510,20 @@ class simulationHandler():
 
 
 class UAVLandingEnv(gymnasium.Env):
-    def __init__(self):
+    def __init__(self, motion_type='static', speed=0.2):
+        # 新增运动参数
+        self.motion_type = motion_type
+        self.speed = speed
+        self.direction = -1  # 直线运动方向
+        self.angle = 0      # 圆周运动角度
+        self.radius = 2     # 圆周运动半径
+        
+        # 统计相关变量
+        self.episode_count = 0
+        self.success_count = 0
+        self.total_error = 0.0
+        self.total_time = 0.0
+        self.landing_results = []
 
         rospy.init_node("offb_test")
 
@@ -666,6 +680,32 @@ class UAVLandingEnv(gymnasium.Env):
 
         # 如果降落任务完成或超时，就杀掉子线程，停止移动降落平台
         if done:
+            # 记录降落结果
+            self.episode_count += 1         
+
+            if done_reason == 'finish':
+                self.success_count += 1
+                x_error, y_error = self.des[0] - data[0], self.des[1] - data[1]
+                error = np.linalg.norm([x_error, y_error])  # 平面误差    
+                self.total_error += error
+                episode_time = self.recorder.drone_current_trajectory[-1][0] - self.recorder.drone_current_trajectory[0][0]
+                self.total_time += episode_time
+                self.landing_results.append({
+                    "success": True,
+                    "landing_point": [data[0], data[1]],
+                    "platform_position": [self.des[0], self.des[1]],
+                    "time": episode_time,
+                    # "trajectory": self.recorder.drone_current_trajectory
+                })
+            else:
+                self.landing_results.append({
+                    "success": False,
+                    "landing_point": [data[0], data[1]],
+                    "platform_position": [self.des[0], self.des[1]],
+                    # "time": episode_time,
+                    # "trajectory": self.recorder.drone_current_trajectory
+                })
+
             self.stop_event.set()
             self.landing_area_thread.join()
 
@@ -779,36 +819,82 @@ class UAVLandingEnv(gymnasium.Env):
 
         return np.array(state, dtype=np.float32), {'distance':abs(g_start_point_x-g_destination_x)+abs(g_start_point_y-g_destination_y), 'dest':(g_destination_x, g_destination_y)}
 
-    def move_landing_area(self, options=None):
+    # def move_landing_area(self, options=None):
+    #     self.landing_area_msg.model_name = 'landing_area'
+    #     frq = 30
+    #     rate = rospy.Rate(frq)
+
+    #     print("rate.to_sec()=", frq)
+
+    #     speed = 0.2  # 运动速度
+    #     direction = -1
+    #     self.landing_area_msg.pose.position.x = 3
+    #     self.landing_area_msg.pose.position.y = 3
+    #     self.landing_area_msg.pose.position.z = 0
+
+    #     if options == None:
+    #         while not self.stop_event.is_set():
+    #             if direction == 1:  # 从 (0, 0) 到 (3, 3) 运动
+    #                 if self.landing_area_msg.pose.position.x < 3:
+    #                     self.landing_area_msg.pose.position.x += speed / frq
+    #                     self.landing_area_msg.pose.position.y += speed / frq
+    #                 else:
+    #                     direction = -1  # 到达 (3, 3)，改变运动方向
+    #             else:  # 从 (3, 3) 到 (0, 0) 运动
+    #                 if self.landing_area_msg.pose.position.x > 0:
+    #                     self.landing_area_msg.pose.position.x -= speed / frq
+    #                     self.landing_area_msg.pose.position.y -= speed / frq
+    #                 else:
+    #                     direction = 1  # 到达 (0, 0)，改变运动方向
+
+    #             self.landing_area_pub.publish(self.landing_area_msg)
+    #             rate.sleep()
+
+    def move_landing_area(self):
         self.landing_area_msg.model_name = 'landing_area'
         frq = 30
         rate = rospy.Rate(frq)
-
-        print("rate.to_sec()=", frq)
-
-        speed = 0.2  # 运动速度
-        direction = -1
-        self.landing_area_msg.pose.position.x = 3
-        self.landing_area_msg.pose.position.y = 3
-        self.landing_area_msg.pose.position.z = 0
-
-        if options == None:
-            while not self.stop_event.is_set():
-                if direction == 1:  # 从 (0, 0) 到 (3, 3) 运动
-                    if self.landing_area_msg.pose.position.x < 3:
-                        self.landing_area_msg.pose.position.x += speed / frq
-                        self.landing_area_msg.pose.position.y += speed / frq
+        
+        # 初始位置
+        x, y, z = 3.0, 3.0, 0.0  # 直线运动起点
+        
+        while not self.stop_event.is_set():
+            if self.motion_type == 'static':
+                pass  # 静止不动
+            
+            elif self.motion_type == 'linear':
+                # 直线往复运动
+                if self.direction == 1:
+                    if x < 3.0:
+                        x += self.speed / frq
+                        y += self.speed / frq
                     else:
-                        direction = -1  # 到达 (3, 3)，改变运动方向
-                else:  # 从 (3, 3) 到 (0, 0) 运动
-                    if self.landing_area_msg.pose.position.x > 0:
-                        self.landing_area_msg.pose.position.x -= speed / frq
-                        self.landing_area_msg.pose.position.y -= speed / frq
+                        self.direction = -1
+                else:
+                    if x > 0.0:
+                        x -= self.speed / frq
+                        y -= self.speed / frq
                     else:
-                        direction = 1  # 到达 (0, 0)，改变运动方向
+                        self.direction = 1
+            
+            elif self.motion_type == 'circular':
+                # 匀速圆周运动
+                self.angle += self.speed / frq
+                x = 3.0 + self.radius * math.cos(self.angle)
+                y = 3.0 + self.radius * math.sin(self.angle)
+            
+            elif self.motion_type == 'random':
+                # 随机运动（限制在0~4米范围内）
+                x += random.uniform(-self.speed/frq, self.speed/frq)
+                y += random.uniform(-self.speed/frq, self.speed/frq)
+                x = np.clip(x, 0.0, 4.0)
+                y = np.clip(y, 0.0, 4.0)
 
-                self.landing_area_pub.publish(self.landing_area_msg)
-                rate.sleep()
+            self.landing_area_msg.pose.position.x = x
+            self.landing_area_msg.pose.position.y = y
+            self.landing_area_msg.pose.position.z = z
+            self.landing_area_pub.publish(self.landing_area_msg)
+            rate.sleep()    
 
     def set_des(self, destination):
         self.des = destination
@@ -856,6 +942,32 @@ class UAVLandingEnv(gymnasium.Env):
 
     def close(self):
         # self.simHandler.reset()
+
+        if self.episode_count > 0:
+            success_rate = self.success_count / self.episode_count
+            avg_error = self.total_error / self.success_count if self.success_count > 0 else 0
+            avg_time = self.total_time / self.success_count if self.success_count > 0 else 0
+        else:
+            success_rate = 0.0
+            avg_error = 0.0
+            avg_time = 0.0
+
+        # 动态生成文件名
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"traj_{self.motion_type}_success{success_rate:.2f}_error{avg_error:.2f}_time{avg_time:.1f}_{timestamp}.json"
+        folder_path = os.path.expanduser('~/ws/uav_demo/trajectory/')
+        self.recorder.file_path = os.path.join(folder_path, filename)
+
+        # 添加元数据到轨迹记录器
+        self.recorder.metadata = {
+            "motion_type": self.motion_type,
+            "speed": self.speed,
+            "success_rate": success_rate,
+            "avg_planar_error": avg_error,
+            "avg_time": avg_time,
+            "landing_results": self.landing_results
+        }
+
         self.recorder.save_trajectories_to_file()
         self.simHandler.land()
         pass
