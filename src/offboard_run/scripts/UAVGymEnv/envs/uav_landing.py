@@ -22,7 +22,7 @@ from threading import Thread, Event as ThreadingEvent
 from pymavlink import mavutil
 
 from tf.transformations import quaternion_from_euler
-
+from uav_trajectory_recorder import DroneAndPlatformTrajectoryRecorder
 
 
 
@@ -549,6 +549,7 @@ class UAVLandingEnv(gymnasium.Env):
         # self.last_speed = np.zeros(3, dtype=float)
         # self.last_shaping = 0
 
+        self.recorder = DroneAndPlatformTrajectoryRecorder()
 
         rospy.loginfo("Environment is ready.")
 
@@ -668,6 +669,8 @@ class UAVLandingEnv(gymnasium.Env):
             self.stop_event.set()
             self.landing_area_thread.join()
 
+            self.recorder.stop_new_trajectory()
+
 
         
         print(f"done: {done}-({done_reason}), reward: {reward:.2f}, ")
@@ -769,6 +772,9 @@ class UAVLandingEnv(gymnasium.Env):
 
         self.cnt = 0
         # self.first_time_after_reset = True
+
+        self.recorder.start_new_trajectory()
+
         rospy.loginfo("Env is reset.")
 
         return np.array(state, dtype=np.float32), {'distance':abs(g_start_point_x-g_destination_x)+abs(g_start_point_y-g_destination_y), 'dest':(g_destination_x, g_destination_y)}
@@ -850,6 +856,7 @@ class UAVLandingEnv(gymnasium.Env):
 
     def close(self):
         # self.simHandler.reset()
+        self.recorder.save_trajectories_to_file()
         self.simHandler.land()
         pass
 
