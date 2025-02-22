@@ -27,7 +27,7 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0113-2330"
+test_time = "0222-1100"
 checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
@@ -62,12 +62,22 @@ def load_reason_list(i, path):
     with open(f"{path}/{i}_reason_list.pkl", 'rb') as f:
         return pickle.load(f)
 
+def curriculum_learning(episode):
+    if episode < 1000:
+        env.motion_type = 'static'
+    elif episode < 5000:
+        env.motion_type = 'linear'
+        env.speed = 0.3
+    else:
+        env.motion_type = 'circular'
+        env.speed = 0.2
+
 if __name__ == "__main__":
 
     create_checkpoints_folder()
 
     algorithm = 'ddpg'
-    restore_from_checkpoint = True
+    restore_from_checkpoint = False
     restore_from = 600
     episode_from = 0
 
@@ -132,6 +142,8 @@ if __name__ == "__main__":
     
 
     for i_episode in range(episode_from, 20001):
+        curriculum_learning(i_episode)  # 每轮调整难度
+
         episode_return = 0
         distance = 0
         state, info = env.reset()
@@ -211,19 +223,4 @@ if __name__ == "__main__":
                 json.dump(parameter_dictionary, outfile)
 
     env.close()
-
-
-    # episodes_list = list(range(len(return_list)))
-    # plt.plot(episodes_list, return_list)
-    # plt.xlabel('Episodes')
-    # plt.ylabel('Returns')
-    # plt.title('DDPG on {}'.format(env_name))
-    # plt.show()
-
-    # mv_return = rl_utils.moving_average(return_list, 9)
-    # plt.plot(episodes_list, mv_return)
-    # plt.xlabel('Episodes')
-    # plt.ylabel('Returns')
-    # plt.title('DDPG on {}'.format(env_name))
-    # plt.show()      
-
+ 

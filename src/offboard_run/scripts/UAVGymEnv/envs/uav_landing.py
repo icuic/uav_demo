@@ -52,13 +52,15 @@ g_start_point_z = 5
 # 目的地
 g_destination_x = 3
 g_destination_y = 3
-g_destination_z = g_start_point_z
+g_destination_z = 1
 
 # 地理围栏
 g_max_x = 5
 g_max_y = 5
-g_max_z = 100
-g_min_z = 4
+g_max_z = 8
+
+# 定义成功降落
+g_landing_tolerance = 0.3
 
 class simulationHandler():
 
@@ -208,23 +210,22 @@ class simulationHandler():
                 # data[0]: 'setVelocity'
                 # data[1]: vx
                 # data[2]: vy
-                # data[3]: True: data[4] is pz, False: data[4] is vz
-                # data[4]: pz or vz
+                # data[3]: vz
 
                 # print("444", data[4])
-                mask = 0    # 4088: px,py,pz only, 4067: pz,vx,vy only, 4039: vx,vy,vz only
-                if data[3] == "True":
-                    mask = 4067
-                    data[4] = 5
-                else:
-                    mask = 4039
+                # mask = 0    # 4088: px,py,pz only, 4067: pz,vx,vy only, 4039: vx,vy,vz only
+                # if data[3] == "True":
+                #     mask = 4067
+                #     data[4] = 5
+                # else:
+                #     mask = 4039
 
                 # print(type(data[3]))
                 # print(data[3])
                 # print("555", data[4])
 
                 # print(f"mask: {mask}, pos: {data[3]}, data[4]: {data[4]}")
-                self.setRaw(mask, g_start_point_x, g_start_point_y, g_start_point_z, data[1], data[2], data[4])
+                self.setRaw(4039, g_start_point_x, g_start_point_y, g_start_point_z, data[1], data[2], data[3])
                 r_msg = self.getState()
 
             elif cmd == 'move':
@@ -545,14 +546,16 @@ class UAVLandingEnv(gymnasium.Env):
 
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float32)
         # self.action_space = spaces.Discrete(4)  # U, D, F, B, L, R
-        self.action_space = spaces.Box(low=np.array([-1, -1]), high=np.array([1, 1]), dtype=np.float32)
+        self.action_space = spaces.Box(low=np.array([-1, -1, -1]), high=np.array([1, 1, 1]), dtype=np.float32)
         self.reward_range = (-np.inf, np.inf)
 
         self._seed()
 
         self.radius = 0.1
+        # 无人机当前位置
         self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
-        self.des = [3, 3, 1]
+        # 降落平台当前位置
+        self.des = [g_destination_x, g_destination_y, g_destination_z]
         self.cnt = 0
 
         rospy.Subscriber('/gazebo/model_states', ModelStates, self.model_states_callback)
@@ -569,6 +572,7 @@ class UAVLandingEnv(gymnasium.Env):
 
         time.sleep(5)
 
+    # 更新降落平台位置
     def model_states_callback(self, msg):
         try:
             # 查找 landing_area 模型的索引
@@ -579,7 +583,7 @@ class UAVLandingEnv(gymnasium.Env):
             
             # 将位置信息添加到列表中
             self.des.clear()
-            self.des.extend((position.x, position.y, 5))
+            self.des.extend((position.x, position.y, g_destination_z))  # 假装降落平台的高度是1米
             
             # 打印位置信息
             # rospy.loginfo(f"Position of landing_area: x={landing_area_position.x}, y={landing_area_position.y}, z={landing_area_position.z}")
@@ -600,46 +604,19 @@ class UAVLandingEnv(gymnasium.Env):
         cmd = ''
         margin = 0.3
 
+
+        if type(action) == np.ndarray  and action.size == 3:
+            cmd = f'setVelocity#{action[0]}#{action[1]}#{action[2]}'
+
+        
         ttt = []
         ttt.append(self.des[0] - self.position[0])
         ttt.append(self.des[1] - self.position[1])
-        ttt.append(1 - self.position[2])
+        ttt.append(self.des[2] - self.position[2])
 
-        # 启发式更新Z轴速度
-        vz, _height, _dist = self.calculate_velocity(ttt)
-        # print(f"111: {vz}")
-        
-        pos_v = False
-        if _dist > 1:
-            pos_v = True
-            vz = 5
-
-        if type(action) == np.ndarray:
-            if action.size == 3:
-                cmd = f'move#{action[0]}#{action[1]}#{action[2]}'
-            elif action.size == 2:
-                # print(f"222: {vz}")
-                cmd = f'setVelocity#{action[0]}#{action[1]}#{pos_v}#{vz}'
-        elif action == 0:  # xPlus
-            cmd = 'moveXPlus' + '#' + str(margin)
-        elif action == 1:  # xMin
-            cmd = 'moveXMin' + '#' + str(margin)
-        elif action == 2:  # yPlus
-            cmd = 'moveYPlus' + '#' + str(margin)
-        elif action == 3:  # yMin
-            cmd = 'moveYMin' + '#' + str(margin)
-        # elif action == 4:  # up
-        #     cmd = 'moveUp' + '#' + str(margin)
-        # elif action == 5:  # down
-        #     cmd = 'moveDown' + '#' + str(margin)
-        # elif action == 4:  # stay
-        #     cmd = 'stay' + '#' + str(margin)
-
-
-        
         reward = 0
-        reward = self.cal_reward(ttt[:2], action[:2])   
-        # reward -= 0.1
+        reward = self.cal_reward(ttt[:3], action[:3])   
+
 
         old_position = np.array([self.position[0], self.position[1], self.position[2]])
 
@@ -657,11 +634,23 @@ class UAVLandingEnv(gymnasium.Env):
         done = False
 
         distance = self.cal_distence(self.position, self.des)
-        # if distance < self.radius and abs(_height) < 0.5:
-        if distance < 0.5 and abs(_height) < 0.5:
+        if distance < g_landing_tolerance and abs(_height) < g_landing_tolerance:
             done = True
             done_reason = 'finish'
-            reward += 10        
+
+            # 着陆精度惩罚（XY平面）
+            horizontal_error = np.linalg.norm([self.des[0]-self.position[0], self.des[1]-self.position[1]]) # XY平面误差
+            position_penalty = -2.0 * horizontal_error
+            
+            # 冲击速度惩罚（指数增长）
+            speed_vertical = abs(action[2])               # 垂直速度绝对值
+            impact_penalty = -4.0 * (np.exp(speed_vertical) - 1)
+            
+            # 成功基础奖励
+            success_reward = 10.0 if horizontal_error < g_landing_tolerance - 0.2 else 5.0
+            
+            reward += position_penalty + impact_penalty + success_reward
+     
 
 # ---        
         # fail reward
@@ -672,6 +661,9 @@ class UAVLandingEnv(gymnasium.Env):
             done = True
             if done and done_reason == '':
                 done_reason = 'out of map'
+
+        # ===== 时间效率惩罚 =====
+        # reward -= 0.02  # 每步微小惩罚鼓励快速决策
 
         self.cnt += 1
         if self.cnt > 600:
@@ -769,7 +761,7 @@ class UAVLandingEnv(gymnasium.Env):
         # g_destination_x, g_destination_y, g_destination_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
         
         self.position = [g_start_point_x, g_start_point_y, g_start_point_z]
-        self.des = [g_destination_x, g_destination_y, g_destination_z]
+        # self.des = [g_destination_x, g_destination_y, g_destination_z]
 
         print("start point: ", ' '.join(f"{pos}" for pos in self.position))
         print("destination: ", ' '.join(f"{pos}" for pos in self.des))
@@ -902,24 +894,42 @@ class UAVLandingEnv(gymnasium.Env):
 
     # 计算奖励
     def cal_reward(self, v1, v2):
-        # 将输入的列表转换为 numpy 数组
-        v1 = np.array(v1)
-        v2 = np.array(v2)
-        # 计算向量 v1 的模
-        magnitude_v1 = np.linalg.norm(v1)
-        # 计算向量 v2 的模
-        magnitude_v2 = np.linalg.norm(v2)
-        # 计算向量 v1 和 v2 的点积
-        dot_product = np.dot(v1, v2)
-        # 计算夹角的余弦值
-        if magnitude_v1 * magnitude_v2 != 0:
-            cos_theta = dot_product / (magnitude_v1 * magnitude_v2)
-        else:
-            cos_theta = 0
+        """
+        v1: 三维速度向量 [vx, vy, vz]
+        v2: 三维相对位置 [dx, dy, dz]
+        """
+        # 计算基础指标
+        distance_3d = np.linalg.norm(v2)
+        speed_3d = np.linalg.norm(v1)
+        height = abs(v2[2])  # 当前高度差
         
-        # reward_ = cos_theta * (1 / (1 + abs(magnitude_v1 - magnitude_v2)))
-        reward_ = cos_theta * (1 + magnitude_v2)
-        return reward_
+        # 1. 接近奖励（指数衰减）
+        proximity_reward = 2.0 / (1.0 + distance_3d)
+        
+        # 2. 方向一致性奖励
+        if distance_3d > 0.1:
+            direction_dot = np.dot(v1, v2) / (speed_3d * distance_3d + 1e-8)
+            direction_reward = 0.8 * direction_dot
+        else:
+            direction_reward = 0.0
+        
+        # 3. 高度相关速度控制
+        vertical_reward = 0.0
+        if height < 5.0:  # 当高度低于5米时激活
+            # 理想下降速度：高度越低速度越慢
+            ideal_vz = -0.3 * height
+            vz_diff = abs(v1[2] - ideal_vz)
+            vertical_reward = -0.5 * vz_diff
+            
+            # 着陆阶段严格限制（高度<1米）
+            if height < 1.0:
+                vertical_reward += -2.0 * abs(v1[2])  # 零速奖励
+        
+        # 4. 合成总奖励
+        total_reward = proximity_reward + direction_reward + vertical_reward
+        
+        # 5. 着陆质量评估（在step函数中处理）
+        return total_reward
 
     def close(self):
         # self.simHandler.reset()
