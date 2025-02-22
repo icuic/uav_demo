@@ -77,8 +77,8 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     algorithm = 'ddpg'
-    restore_from_checkpoint = False
-    restore_from = 200
+    restore_from_checkpoint = True
+    restore_from = 800
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
@@ -211,7 +211,7 @@ if __name__ == "__main__":
         rate_timeout = reason_fifo_list.count('timeout') / len_reason_fifo_list
         rate_cresh = reason_fifo_list.count('cresh') / len_reason_fifo_list
         rate_outmap = reason_fifo_list.count('out of map') / len_reason_fifo_list
-        print(f"success: {rate_success:.2f}, timeout: {rate_timeout:.2f}, cresh: {rate_cresh:.2f}, outmap: {rate_outmap}, len_fifo: {len_reason_fifo_list}")
+        print(f"success: {rate_success:.2f}, timeout: {rate_timeout:.2f}, cresh: {rate_cresh:.2f}, outmap: {rate_outmap:.2f}, len_fifo: {len_reason_fifo_list}")
 
 
         print(f'episode: {i_episode}, return: {episode_return}')

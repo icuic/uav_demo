@@ -584,7 +584,7 @@ class UAVLandingEnv(gymnasium.Env):
             
             # 将位置信息添加到列表中
             self.des.clear()
-            self.des.extend((position.x, position.y, g_destination_z))  # 假装降落平台的高度是1米
+            self.des.extend((position.x, position.y, g_destination_z))  # 假装降落平台的高度是2米
             
             # 打印位置信息
             # rospy.loginfo(f"Position of landing_area: x={landing_area_position.x}, y={landing_area_position.y}, z={landing_area_position.z}")
@@ -761,15 +761,15 @@ class UAVLandingEnv(gymnasium.Env):
         # g_start_point_y = 3
         # g_start_point_z = g_start_point_z
         
-        g_destination_x = 3
-        g_destination_y = 3
-        g_destination_z = 1
+        # g_destination_x = 3
+        # g_destination_y = 3
+        # g_destination_z = 2
 
         # g_start_point_x, g_start_point_y, g_start_point_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
         # g_destination_x, g_destination_y, g_destination_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
         
         self.position = [g_start_point_x, g_start_point_y, g_start_point_z]
-        # self.des = [g_destination_x, g_destination_y, g_destination_z]
+       
 
         print("start point: ", ' '.join(f"{pos:.2f}" for pos in self.position))
         # print("destination: ", ' '.join(f"{pos:.2f}" for pos in self.des))
@@ -783,7 +783,25 @@ class UAVLandingEnv(gymnasium.Env):
         # 改变模型pose
     
         # 创建新线程，专门用于发布话题
-        self.landing_area_thread = Thread(target=self.move_landing_area, args=(), name="move_landing_area_thread")
+        # 初始化运动参数
+        x, y = 0.0, 0.0
+        if self.motion_type == 'static':
+            # 随机生成[-5,5]范围内的初始位置
+            x = round(random.uniform(-5, 5), 2)
+            y = round(random.uniform(-5, 5), 2)
+        elif self.motion_type == 'linear':
+            # 初始化在起点(4,4)
+            x, y = 4.0, 4.0
+            self.direction = -1
+        elif self.motion_type == 'circular':
+            # 圆周运动初始角度
+            self.angle = 0
+            self.landing_area_radius = 3  # 半径设为3米
+
+        g_destination_x , g_destination_y = x, y
+        self.des = [g_destination_x, g_destination_y, g_destination_z]
+
+        self.landing_area_thread = Thread(target=self.move_landing_area, args=(x, y), name="move_landing_area_thread")
         self.landing_area_thread.daemon = True
         self.landing_area_thread.start()     
         self.direction = -1  # 运动方向，1 表示从 (0, 0) 到 (3, 3)，-1 表示从 (3, 3) 到 (0, 0)
@@ -802,7 +820,7 @@ class UAVLandingEnv(gymnasium.Env):
         data[0] = self.des[0] - data[0] 
         data[1] = self.des[1] - data[1] 
         # data[2] = self.des[2] - data[2]
-        # 为方便仿真，假设降落平台的高度为1米
+        # 为方便仿真，假设降落平台的高度为2米
         data[2] = self.des[2] - data[2]      
 
         state = data
@@ -819,25 +837,26 @@ class UAVLandingEnv(gymnasium.Env):
 
         return np.array(state, dtype=np.float32), {'distance':abs(g_start_point_x-g_destination_x)+abs(g_start_point_y-g_destination_y), 'dest':(g_destination_x, g_destination_y)}
 
-    def move_landing_area(self):
+    def move_landing_area(self, x, y):
         self.landing_area_msg.model_name = 'landing_area'
         frq = 30
         rate = rospy.Rate(frq)
         
-        # 初始化运动参数
-        x, y = 0.0, 0.0
-        if self.motion_type == 'static':
-            # 随机生成[-5,5]范围内的初始位置
-            x = random.uniform(-5, 5)
-            y = random.uniform(-5, 5)
-        elif self.motion_type == 'linear':
-            # 初始化在起点(4,4)
-            x, y = 4.0, 4.0
-            self.direction = -1
-        elif self.motion_type == 'circular':
-            # 圆周运动初始角度
-            self.angle = 0
-            self.landing_area_radius = 3  # 半径设为3米
+        # # 初始化运动参数
+        # x, y = 0.0, 0.0
+        # if self.motion_type == 'static':
+        #     # 随机生成[-5,5]范围内的初始位置
+        #     x = random.uniform(-5, 5)
+        #     y = random.uniform(-5, 5)
+
+        # elif self.motion_type == 'linear':
+        #     # 初始化在起点(4,4)
+        #     x, y = 4.0, 4.0
+        #     self.direction = -1
+        # elif self.motion_type == 'circular':
+        #     # 圆周运动初始角度
+        #     self.angle = 0
+        #     self.landing_area_radius = 3  # 半径设为3米
 
         self.stop_event.clear()
 
