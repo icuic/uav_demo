@@ -18,6 +18,10 @@ class DroneAndPlatformTrajectoryRecorder:
         self.drone_current_trajectory = []
         self.platform_all_trajectories = []
         self.platform_current_trajectory = []
+
+        # 增加轨迹保存标志，初始为 0
+        self.save_trajectory_flag = 0
+
         # 用于临时存储无人机的速度
         self.drone_velocity = None
         # 订阅无人机位置话题
@@ -38,9 +42,6 @@ class DroneAndPlatformTrajectoryRecorder:
             os.makedirs(folder_path)
         # 构造包含日期和时间的完整文件名
         self.file_path = os.path.join(folder_path, f"drone_and_platform_trajectories_{timestamp}.json")
-
-        # 增加轨迹保存标志，初始为 0
-        self.save_trajectory_flag = 0
 
     def drone_pose_callback(self, msg):
         if self.save_trajectory_flag == 1:

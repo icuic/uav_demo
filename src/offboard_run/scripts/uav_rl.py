@@ -77,8 +77,8 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     algorithm = 'ddpg'
-    restore_from_checkpoint = False
-    restore_from = 600
+    restore_from_checkpoint = True
+    restore_from = 200
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
@@ -141,6 +141,8 @@ if __name__ == "__main__":
 
     
 
+    reason_fifo_list = collections.deque(maxlen=100)
+
     for i_episode in range(episode_from, 20001):
         curriculum_learning(i_episode)  # 每轮调整难度
 
@@ -150,9 +152,9 @@ if __name__ == "__main__":
         distance = info.get('distance')
         destination = info.get('dest')
         done = False
-        print("20 seconds sleeping after reset...")
+        # print("20 seconds sleeping after reset...")
         # time.sleep(2)
-        print("waked")
+        # print("waked")
 
         # while True:
         #     env.step(np.array([0, 0], dtype=float))
@@ -174,7 +176,7 @@ if __name__ == "__main__":
 
             i_step += 1
             print(f'{f"{i_episode}/{i_step}-{destination}":-^50}')
-            print(f'action is {action[0]}, {action[1]}')
+            print(f'action is {action[0]}, {action[1], action[2]}')
 
             next_state, reward, done, _ = env.step(action)     
             # print(f"exp: state: {state}, action: {action}, reward: {reward}, next_state: {next_state}, done: {done}")
@@ -203,6 +205,14 @@ if __name__ == "__main__":
         return_list.append(episode_return)
         reason_list.append(_['done_reason'])
         # steps_distance_list.append(round(i_step/distance, 2))
+        reason_fifo_list.append(_['done_reason'])
+        len_reason_fifo_list = len(reason_fifo_list)
+        rate_success = reason_fifo_list.count('finish') / len_reason_fifo_list
+        rate_timeout = reason_fifo_list.count('timeout') / len_reason_fifo_list
+        rate_cresh = reason_fifo_list.count('cresh') / len_reason_fifo_list
+        rate_outmap = reason_fifo_list.count('out of map') / len_reason_fifo_list
+        print(f"success: {rate_success:.2f}, timeout: {rate_timeout:.2f}, cresh: {rate_cresh:.2f}, outmap: {rate_outmap}, len_fifo: {len_reason_fifo_list}")
+
 
         print(f'episode: {i_episode}, return: {episode_return}')
 
