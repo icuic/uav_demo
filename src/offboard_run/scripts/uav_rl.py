@@ -77,7 +77,7 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     algorithm = 'ddpg'
-    restore_from_checkpoint = True
+    restore_from_checkpoint = False
     restore_from = 200
     episode_from = 0
 
