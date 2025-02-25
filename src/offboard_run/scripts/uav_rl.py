@@ -27,7 +27,7 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0222-1100"
+test_time = "0225-2315"
 checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     algorithm = 'ddpg'
-    restore_from_checkpoint = True
+    restore_from_checkpoint = False
     restore_from = 7000
     episode_from = 0
 
@@ -209,12 +209,12 @@ if __name__ == "__main__":
         len_reason_fifo_list = len(reason_fifo_list)
         rate_success = reason_fifo_list.count('finish') / len_reason_fifo_list
         rate_timeout = reason_fifo_list.count('timeout') / len_reason_fifo_list
-        rate_cresh = reason_fifo_list.count('cresh') / len_reason_fifo_list
+        rate_crash = reason_fifo_list.count('crash') / len_reason_fifo_list
         rate_outmap = reason_fifo_list.count('out of map') / len_reason_fifo_list
-        print(f"success: {rate_success:.2f}, timeout: {rate_timeout:.2f}, cresh: {rate_cresh:.2f}, outmap: {rate_outmap:.2f}, len_fifo: {len_reason_fifo_list}, learning: {replay_buffer.size() > minimal_size}")
+        print(f"success: {rate_success:.2f}, timeout: {rate_timeout:.2f}, crash: {rate_crash:.2f}, outmap: {rate_outmap:.2f}, len_fifo: {len_reason_fifo_list}, learning: {replay_buffer.size() > minimal_size}")
 
 
-        print(f'episode: {i_episode}, return: {episode_return}')
+        print(f'episode: {i_episode}, return: {episode_return:.2f}')
 
         if i_episode % 50 == 0:
             agent.save(checkpoints_path, i_episode)

@@ -61,7 +61,7 @@ g_max_z = 10
 
 # 定义成功降落
 g_landing_tolerance = 0.5
-g_cresh_shreshold = 1.5
+g_crash_shreshold = 1.5
 
 # train or eval
 g_eval = False
@@ -625,7 +625,12 @@ class UAVLandingEnv(gymnasium.Env):
         if type(action) == np.ndarray  and action.size == 3:
             cmd = f'setVelocity#{action[0]}#{action[1]}#{action[2]}'
 
-        
+
+
+        print("uav: ", ', '.join(f"{pos:.2f}" for pos in self.position))
+        print("tgt: ", ", ".join(f"{num:.2f}" for num in self.des))
+
+
         ttt = []
         ttt.append(self.des[0] - self.position[0])
         ttt.append(self.des[1] - self.position[1])
@@ -642,15 +647,10 @@ class UAVLandingEnv(gymnasium.Env):
         data = self.simHandler.getState()
         self.position = [round(data[i], 2) for i in range(3)]
         # self.position = [round(self.position[i], 2) for i in range(3)]
-        
 
         height = abs(self.des[2] - self.position[2])
         distance = self.cal_distence(self.position, self.des)
-
-        print("self.position: ", ' '.join(f"{pos:.2f}" for pos in self.position))
-        print("landing area: ", " ".join(f"{num:.2f}" for num in self.des[:3]))
-        print(f"height: {height:.2f}, dist: {distance:.2f}")
-        # print("action: ", ' '.join(f"{v:.2f}" for v in (action[0], action[1], action[2])))
+        print(f"hight: {height:.2f}, dist: {distance:.2f}")
         print("---")
         
         done = False
@@ -687,14 +687,14 @@ class UAVLandingEnv(gymnasium.Env):
         reward -= 0.2  # 每步微小惩罚鼓励快速决策
 
         self.cnt += 1
-        if self.cnt > 300:
+        if self.cnt > 200:
             done = True
             done_reason = 'timeout'
             reward -= 500
 
-        if self.position[2] < g_cresh_shreshold:
+        if self.position[2] < g_crash_shreshold:
             done = True
-            done_reason = 'cresh'
+            done_reason = 'crash'
             reward -= 500
 
         # 如果降落任务完成或超时，就杀掉子线程，停止移动降落平台
@@ -953,13 +953,13 @@ class UAVLandingEnv(gymnasium.Env):
         horizontal_speed = np.linalg.norm(v1[:2])   # 提取水平速度分量
         
         # 1. 接近奖励（指数衰减） [0, 4]
-        proximity_reward = 4.0 / (1.0 + distance_3d)
+        proximity_reward = 2.0 / (1.0 + distance_3d)
         # proximity_reward = 0
         
         # 2. 方向一致性奖励  [-2, 2]
         if distance_3d > 0.1:
             direction_dot = np.dot(v1, v2) / (speed_3d * distance_3d + 1e-8)
-            direction_reward = 2 * direction_dot
+            direction_reward = 0.8 * direction_dot
         else:
             direction_reward = 0.0
         
