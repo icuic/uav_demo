@@ -60,8 +60,11 @@ g_max_y = 5
 g_max_z = 10
 
 # 定义成功降落
-g_landing_tolerance = 0.3
+g_landing_tolerance = 0.5
 g_cresh_shreshold = 1.5
+
+# train or eval
+g_eval = False
 
 class simulationHandler():
 
@@ -555,6 +558,7 @@ class UAVLandingEnv(gymnasium.Env):
         self.radius = 0.1
         # 无人机当前位置
         self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
+        # self.position = [g_start_point_x, g_start_point_y, g_start_point_z]
         # 降落平台当前位置
         self.des = [g_destination_x, g_destination_y, g_destination_z]
         self.cnt = 0
@@ -567,7 +571,8 @@ class UAVLandingEnv(gymnasium.Env):
         # self.last_speed = np.zeros(3, dtype=float)
         # self.last_shaping = 0
 
-        ### self.recorder = DroneAndPlatformTrajectoryRecorder()
+        if g_eval:
+            self.recorder = DroneAndPlatformTrajectoryRecorder()
 
         rospy.loginfo("Environment is ready.")
 
@@ -586,6 +591,17 @@ class UAVLandingEnv(gymnasium.Env):
             self.des.clear()
             self.des.extend((position.x, position.y, g_destination_z))  # 假装降落平台的高度是2米
             
+            # # 查找 iris 模型的索引
+            # iris_index = msg.name.index("iris")
+            
+            # # 提取 landing_area 的位置信息
+            # position = msg.pose[iris_index].position
+            
+            # # 将位置信息添加到列表中
+            # self.position.clear()
+            # self.position.extend((position.x, position.y, position.z)) 
+
+
             # 打印位置信息
             # rospy.loginfo(f"Position of landing_area: x={landing_area_position.x}, y={landing_area_position.y}, z={landing_area_position.z}")
 
@@ -625,6 +641,8 @@ class UAVLandingEnv(gymnasium.Env):
         time.sleep(0.05)
         data = self.simHandler.getState()
         self.position = [round(data[i], 2) for i in range(3)]
+        # self.position = [round(self.position[i], 2) for i in range(3)]
+        
 
         height = abs(self.des[2] - self.position[2])
         distance = self.cal_distence(self.position, self.des)
@@ -650,7 +668,7 @@ class UAVLandingEnv(gymnasium.Env):
             impact_penalty = -4.0 * (np.exp(speed_vertical) - 1)
             
             # 成功基础奖励
-            success_reward = 10.0 if horizontal_error < g_landing_tolerance - 0.2 else 5.0
+            success_reward = 500.0 if horizontal_error < g_landing_tolerance - 0.2 else 300.0
             
             reward += position_penalty + impact_penalty + success_reward
      
@@ -660,57 +678,59 @@ class UAVLandingEnv(gymnasium.Env):
         if (np.abs(self.position[0]) > g_max_x+1 or
                 np.abs(self.position[1]) > g_max_y+1 or
                 self.position[2] > g_max_z):
-            reward -= 50
+            reward -= 500
             done = True
             if done and done_reason == '':
                 done_reason = 'out of map'
 
         # ===== 时间效率惩罚 =====
-        # reward -= 0.02  # 每步微小惩罚鼓励快速决策
+        reward -= 0.2  # 每步微小惩罚鼓励快速决策
 
         self.cnt += 1
         if self.cnt > 300:
             done = True
             done_reason = 'timeout'
+            reward -= 500
 
         if self.position[2] < g_cresh_shreshold:
             done = True
             done_reason = 'cresh'
-            reward -= 50
+            reward -= 500
 
         # 如果降落任务完成或超时，就杀掉子线程，停止移动降落平台
         if done:
             # 记录降落结果
             self.episode_count += 1         
 
-            # if done_reason == 'finish':
-            #     self.success_count += 1
-            #     x_error, y_error = self.des[0] - data[0], self.des[1] - data[1]
-            #     error = np.linalg.norm([x_error, y_error])  # 平面误差    
-            #     self.total_error += error
-            #     episode_time = self.recorder.drone_current_trajectory[-1][0] - self.recorder.drone_current_trajectory[0][0]
-            #     self.total_time += episode_time
-            #     self.landing_results.append({
-            #         "success": True,
-            #         "landing_point": [data[0], data[1]],
-            #         "platform_position": [self.des[0], self.des[1]],
-            #         "time": episode_time,
-            #         # "trajectory": self.recorder.drone_current_trajectory
-            #     })
-            # else:
-            #     self.landing_results.append({
-            #         "success": False,
-            #         "landing_point": [data[0], data[1]],
-            #         "platform_position": [self.des[0], self.des[1]],
-            #         # "time": episode_time,
-            #         # "trajectory": self.recorder.drone_current_trajectory
-            #     })
+            if g_eval:
+                if done_reason == 'finish':
+                    self.success_count += 1
+                    x_error, y_error = self.des[0] - data[0], self.des[1] - data[1]
+                    error = np.linalg.norm([x_error, y_error])  # 平面误差    
+                    self.total_error += error
+                    episode_time = self.recorder.drone_current_trajectory[-1][0] - self.recorder.drone_current_trajectory[0][0]
+                    self.total_time += episode_time
+                    self.landing_results.append({
+                        "success": True,
+                        "landing_point": [data[0], data[1]],
+                        "platform_position": [self.des[0], self.des[1]],
+                        "time": episode_time,
+                        # "trajectory": self.recorder.drone_current_trajectory
+                    })
+                else:
+                    self.landing_results.append({
+                        "success": False,
+                        "landing_point": [data[0], data[1]],
+                        "platform_position": [self.des[0], self.des[1]],
+                        # "time": episode_time,
+                        # "trajectory": self.recorder.drone_current_trajectory
+                    })
 
             self.stop_event.set()
             self.landing_area_thread.join()
 
-            # self.recorder.stop_new_trajectory()
-
+            if g_eval:
+                self.recorder.stop_new_trajectory()
 
         
         print(f"done: {done}-({done_reason}), reward: {reward:.2f}, ")
@@ -831,7 +851,8 @@ class UAVLandingEnv(gymnasium.Env):
         self.cnt = 0
         # self.first_time_after_reset = True
 
-        # self.recorder.start_new_trajectory()
+        if g_eval:
+            self.recorder.start_new_trajectory()
 
         rospy.loginfo("Env is reset.")
 
@@ -928,65 +949,76 @@ class UAVLandingEnv(gymnasium.Env):
         # 计算基础指标
         distance_3d = np.linalg.norm(v2)
         speed_3d = np.linalg.norm(v1)
-        height = abs(v2[2])  # 当前高度差
+        height = abs(v2[2])                         # 当前高度差
+        horizontal_speed = np.linalg.norm(v1[:2])   # 提取水平速度分量
         
-        # 1. 接近奖励（指数衰减）
-        proximity_reward = 2.0 / (1.0 + distance_3d)
+        # 1. 接近奖励（指数衰减） [0, 4]
+        proximity_reward = 4.0 / (1.0 + distance_3d)
+        # proximity_reward = 0
         
-        # 2. 方向一致性奖励
+        # 2. 方向一致性奖励  [-2, 2]
         if distance_3d > 0.1:
             direction_dot = np.dot(v1, v2) / (speed_3d * distance_3d + 1e-8)
-            direction_reward = 0.8 * direction_dot
+            direction_reward = 2 * direction_dot
         else:
             direction_reward = 0.0
         
         # 3. 高度相关速度控制
         vertical_reward = 0.0
-        if height < 5.0:  # 当高度低于5米时激活
-            # 理想下降速度：高度越低速度越慢
-            ideal_vz = -0.3 * height
-            vz_diff = abs(v1[2] - ideal_vz)
-            vertical_reward = -0.5 * vz_diff
+        # if height < 2.5:  # 当高度低于5米时激活
+        #     # 理想下降速度：高度越低速度越慢
+        #     ideal_vz = -0.4 * height
+        #     vz_diff = abs(v1[2] - ideal_vz)
+        #     vertical_reward = -0.5 * vz_diff
             
-            # 着陆阶段严格限制（高度<1米）
-            if height < 1.0:
-                vertical_reward += -2.0 * abs(v1[2])  # 零速奖励
+        #     # 着陆阶段严格限制（高度<1米）
+        #     if height < 1.0:
+        #         vertical_reward += -0.5 * abs(v1[2])  # 零速奖励
         
-        # 4. 合成总奖励
-        total_reward = proximity_reward + direction_reward + vertical_reward
+        # 4. 平面速度惩罚（动态权重）
+        speed_penalty = 0.0
+        # if distance_3d < 1:  # 当距离目标小于1米时激活
+        #     # 距离越近，对水平速度的惩罚越强（线性增长）
+        #     speed_penalty = -1.0 * (1.0 / (distance_3d + 0.1)) * horizontal_speed
+
+        # 5. 合成总奖励
+        total_reward = proximity_reward + direction_reward + vertical_reward + speed_penalty
         
-        # 5. 着陆质量评估（在step函数中处理）
+        # 6. 着陆质量评估（在step函数中处理）
         return total_reward
 
     def close(self):
-        # self.simHandler.reset()
+        self.simHandler.reset()
 
-        # if self.episode_count > 0:
-        #     success_rate = self.success_count / self.episode_count
-        #     avg_error = self.total_error / self.success_count if self.success_count > 0 else 0
-        #     avg_time = self.total_time / self.success_count if self.success_count > 0 else 0
-        # else:
-        #     success_rate = 0.0
-        #     avg_error = 0.0
-        #     avg_time = 0.0
+        if g_eval:
+            if self.episode_count > 0:
+                success_rate = self.success_count / self.episode_count
+                avg_error = self.total_error / self.success_count if self.success_count > 0 else 0
+                avg_time = self.total_time / self.success_count if self.success_count > 0 else 0
+            else:
+                success_rate = 0.0
+                avg_error = 0.0
+                avg_time = 0.0
 
-        # # 动态生成文件名
-        # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # filename = f"traj_{self.motion_type}_speed{self.speed:.1f}_success{success_rate:.2f}_error{avg_error:.2f}_time{avg_time:.1f}_{timestamp}.json"
-        # folder_path = os.path.expanduser('~/ws/uav_demo/trajectory/')
-        # self.recorder.file_path = os.path.join(folder_path, filename)
+            # 动态生成文件名
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"traj_{self.motion_type}_speed{self.speed:.1f}_success{success_rate:.2f}_error{avg_error:.2f}_time{avg_time:.1f}_{timestamp}.json"
+            folder_path = os.path.expanduser('~/ws/uav_demo/trajectory/')
+            self.recorder.file_path = os.path.join(folder_path, filename)
 
-        # # 添加元数据到轨迹记录器
-        # self.recorder.metadata = {
-        #     "motion_type": self.motion_type,
-        #     "speed": self.speed,
-        #     "success_rate": success_rate,
-        #     "avg_planar_error": avg_error,
-        #     "avg_time": avg_time,
-        #     "landing_results": self.landing_results
-        # }
+            # 添加元数据到轨迹记录器
+            self.recorder.metadata = {
+                "motion_type": self.motion_type,
+                "speed": self.speed,
+                "success_rate": success_rate,
+                "avg_planar_error": avg_error,
+                "avg_time": avg_time,
+                "landing_results": self.landing_results
+            }
 
-        # self.recorder.save_trajectories_to_file()
+            self.recorder.save_trajectories_to_file()
+
+
         self.simHandler.land()
         pass
 

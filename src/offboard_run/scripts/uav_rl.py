@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
     algorithm = 'ddpg'
     restore_from_checkpoint = True
-    restore_from = 800
+    restore_from = 7000
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
@@ -108,9 +108,9 @@ if __name__ == "__main__":
         gamma = 0.98
         tau = 0.005  # 软更新参数
         buffer_size = 10000
-        minimal_size = 1000
+        minimal_size = 8000
         batch_size = 64
-        sigma = 0.01  # 高斯噪声标准差
+        sigma = 0.1  # 高斯噪声标准差
         total_iterated = 0
 
     state_dim = env.observation_space.shape[0]
@@ -176,7 +176,7 @@ if __name__ == "__main__":
 
             i_step += 1
             print(f'{f"{i_episode}/{i_step}-{destination}":-^50}')
-            print(f'action is {action[0]}, {action[1], action[2]}')
+            print(f'action is {action[0], action[1], action[2]}')
 
             next_state, reward, done, _ = env.step(action)     
             # print(f"exp: state: {state}, action: {action}, reward: {reward}, next_state: {next_state}, done: {done}")
@@ -211,7 +211,7 @@ if __name__ == "__main__":
         rate_timeout = reason_fifo_list.count('timeout') / len_reason_fifo_list
         rate_cresh = reason_fifo_list.count('cresh') / len_reason_fifo_list
         rate_outmap = reason_fifo_list.count('out of map') / len_reason_fifo_list
-        print(f"success: {rate_success:.2f}, timeout: {rate_timeout:.2f}, cresh: {rate_cresh:.2f}, outmap: {rate_outmap:.2f}, len_fifo: {len_reason_fifo_list}")
+        print(f"success: {rate_success:.2f}, timeout: {rate_timeout:.2f}, cresh: {rate_cresh:.2f}, outmap: {rate_outmap:.2f}, len_fifo: {len_reason_fifo_list}, learning: {replay_buffer.size() > minimal_size}")
 
 
         print(f'episode: {i_episode}, return: {episode_return}')

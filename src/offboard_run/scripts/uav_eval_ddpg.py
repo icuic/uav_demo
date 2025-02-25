@@ -27,7 +27,13 @@ import json
 import rl_utils as rl_utils
 import argparse
 
-test_time = "0113-2330"
+
+# 在每次开始测试之前，修改这些测试参数
+test_time = "0222-1100"
+restore_from = 2300
+test_numbers = 10
+
+
 checkpoints_path = './checkpoints/'+test_time
 
 
@@ -45,7 +51,7 @@ if __name__ == "__main__":
     # 确保速度不超过0.8
     args.speed = min(args.speed, 0.8)
 
-    restore_from = 7000
+    
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
     env = gymnasium.make(env_name, motion_type=args.motion_type, speed=args.speed)
@@ -81,7 +87,7 @@ if __name__ == "__main__":
         out = 0
         timeout = 0
 
-        for i_episode in range(0, 10):
+        for i_episode in range(0, test_numbers):
             state, info = env.reset()
             done = False
 
