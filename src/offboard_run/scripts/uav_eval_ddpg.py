@@ -29,9 +29,9 @@ import argparse
 
 
 # 在每次开始测试之前，修改这些测试参数
-test_time = "0222-1100"
-restore_from = 2300
-test_numbers = 10
+test_time = "0225-2315"
+restore_from = 9800
+test_numbers = 100
 
 
 checkpoints_path = './checkpoints/'+test_time
@@ -69,7 +69,7 @@ if __name__ == "__main__":
         buffer_size = d.get('buffer_size')
         minimal_size = d.get('minimal_size')
         batch_size = d.get('batch_size')
-        sigma = d.get('sigma')
+        sigma = 0
         total_iterated = d.get('total_iterated')
 
     state_dim = env.observation_space.shape[0]
