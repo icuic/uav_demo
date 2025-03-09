@@ -232,7 +232,7 @@ class DroneAndPlatformTrajectoryRecorder:
         try:
             # 首次调用时需要选择文件
             if self.plot_file_path is None:
-                target_dir = "/home/ubuntu/ws/uav_demo/trajectory/0225-2315-20000"
+                target_dir = "/home/ubuntu/ws/uav_demo/trajectory/0304-2330-5000"
                 files = self.get_trajectory_files(target_dir)
                 
                 if not files:

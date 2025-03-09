@@ -27,7 +27,7 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0225-2315"
+test_time = "0304-2330"
 checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
@@ -139,8 +139,8 @@ if __name__ == "__main__":
         reason_list = load_reason_list(restore_from, checkpoints_path)
         steps_distance_list = load_steps_distance_list(restore_from, checkpoints_path)
 
-    
-
+    early_stop = False
+    continue_times = 0
     reason_fifo_list = collections.deque(maxlen=100)
 
     for i_episode in range(episode_from, 20001):
@@ -212,11 +212,17 @@ if __name__ == "__main__":
         rate_crash = reason_fifo_list.count('crash') / len_reason_fifo_list
         rate_outmap = reason_fifo_list.count('out of map') / len_reason_fifo_list
         print(f"success: {rate_success:.2f}, timeout: {rate_timeout:.2f}, crash: {rate_crash:.2f}, outmap: {rate_outmap:.2f}, len_fifo: {len_reason_fifo_list}, learning: {replay_buffer.size() > minimal_size}")
-
-
+      
         print(f'episode: {i_episode}, return: {episode_return:.2f}')
 
-        if i_episode % 50 == 0:
+        if rate_success >= 0.95:
+            continue_times += 1
+            if continue_times > 200:
+                early_stop = True
+        else:
+            continue_times = 0
+
+        if i_episode % 50 == 0 or early_stop:
             agent.save(checkpoints_path, i_episode)
             replay_buffer.save(f"{checkpoints_path}/{i_episode}_buffer.pth")
             save_return_list(i_episode, checkpoints_path, return_list)
@@ -231,6 +237,9 @@ if __name__ == "__main__":
             parameter_dictionary = dict(zip(parameter_keys, parameter_values))
             with open(f'{checkpoints_path}/{i_episode}_hyperparameter' + '.json', 'w') as outfile:
                 json.dump(parameter_dictionary, outfile)
+
+        if early_stop:
+            break
 
     env.close()
  

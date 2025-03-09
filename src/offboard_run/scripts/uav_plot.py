@@ -19,7 +19,7 @@ def moving_average(a, window_size):
     end = (np.cumsum(a[:-window_size:-1])[::2] / r)[::-1]
     return np.concatenate((begin, middle, end))
 
-a = load_return_list(9800, "./checkpoints/0225-2315")
+a = load_return_list(5000, "./checkpoints/0304-2330")
 # print(a[4900:4950])
 
 episodes_list = list(range(len(a)))

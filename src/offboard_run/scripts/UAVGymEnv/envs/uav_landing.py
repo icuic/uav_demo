@@ -64,7 +64,7 @@ g_landing_tolerance = 0.5
 g_crash_shreshold = 1.5
 
 # train or eval
-g_eval = False
+g_eval = True
 
 class simulationHandler():
 
@@ -515,13 +515,14 @@ class simulationHandler():
 
 
 class UAVLandingEnv(gymnasium.Env):
-    def __init__(self, motion_type='static', speed=0.2):
+    def __init__(self, motion_type='static', speed=0.2, model=None):
         # 新增运动参数
         self.motion_type = motion_type
         self.speed = speed
         self.direction = -1  # 直线运动方向
         self.angle = 0      # 圆周运动角度
         self.landing_area_radius = 3     # 圆周运动半径
+        self.model = model
         
         # 统计相关变量
         self.episode_count = 0
@@ -816,7 +817,7 @@ class UAVLandingEnv(gymnasium.Env):
         elif self.motion_type == 'circular':
             # 圆周运动初始角度
             self.angle = 0
-            self.landing_area_radius = 3  # 半径设为3米
+            self.landing_area_radius = 4  # 半径设为4米
 
         g_destination_x , g_destination_y = x, y
         self.des = [g_destination_x, g_destination_y, g_destination_z]
@@ -953,15 +954,17 @@ class UAVLandingEnv(gymnasium.Env):
         horizontal_speed = np.linalg.norm(v1[:2])   # 提取水平速度分量
         
         # 1. 接近奖励（指数衰减） [0, 4]
-        proximity_reward = 2.0 / (1.0 + distance_3d)
-        # proximity_reward = 0
+        # proximity_reward = 2.0 / (1.0 + distance_3d)
+        proximity_reward = 0
         
         # 2. 方向一致性奖励  [-2, 2]
         if distance_3d > 0.1:
             direction_dot = np.dot(v1, v2) / (speed_3d * distance_3d + 1e-8)
-            direction_reward = 0.8 * direction_dot
+            direction_reward = 1 * direction_dot
         else:
             direction_reward = 0.0
+
+        direction_reward =+ np.dot(v1, v2) / (speed_3d * distance_3d + 1e-8) * speed_3d
         
         # 3. 高度相关速度控制
         vertical_reward = 0.0
@@ -1002,7 +1005,7 @@ class UAVLandingEnv(gymnasium.Env):
 
             # 动态生成文件名
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"traj_{self.motion_type}_speed{self.speed:.1f}_success{success_rate:.2f}_error{avg_error:.2f}_time{avg_time:.1f}_{timestamp}.json"
+            filename = f"traj_{self.motion_type}_speed{self.speed:.1f}_success{success_rate:.2f}_error{avg_error:.2f}_time{avg_time:.1f}_{timestamp}_model{self.model}.json"
             folder_path = os.path.expanduser('~/ws/uav_demo/trajectory/')
             self.recorder.file_path = os.path.join(folder_path, filename)
 

@@ -29,9 +29,9 @@ import argparse
 
 
 # 在每次开始测试之前，修改这些测试参数
-test_time = "0225-2315"
-restore_from = 9800
-test_numbers = 100
+test_time = "0304-2330"
+restore_from = 5000
+test_numbers = 10
 
 
 checkpoints_path = './checkpoints/'+test_time
@@ -54,7 +54,7 @@ if __name__ == "__main__":
     
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
-    env = gymnasium.make(env_name, motion_type=args.motion_type, speed=args.speed)
+    env = gymnasium.make(env_name, motion_type=args.motion_type, speed=args.speed, model=f"{test_time}-{restore_from}")
 
     with open(f"{checkpoints_path}/{restore_from}_hyperparameter.json") as f:
         d = json.load(f)
