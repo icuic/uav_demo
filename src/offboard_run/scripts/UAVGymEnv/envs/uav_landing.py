@@ -52,7 +52,7 @@ g_start_point_z = 8
 # 目的地
 g_destination_x = 3
 g_destination_y = 3
-g_destination_z = 2
+g_destination_z = 0.5
 
 # 地理围栏
 g_max_x = 5
@@ -61,10 +61,11 @@ g_max_z = 10
 
 # 定义成功降落
 g_landing_tolerance = 0.5
-g_crash_shreshold = 1.5
+g_crash_shreshold = 0.3
 
 # train or eval
-g_eval = True
+g_eval = False
+g_uav_true_value = True
 
 class simulationHandler():
 
@@ -539,8 +540,6 @@ class UAVLandingEnv(gymnasium.Env):
         self.unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
         self.pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
         self.reset_proxy = rospy.ServiceProxy('/gazebo/reset_world', Empty)
-
-        # rospy.Subscriber('/gazebo/model_states', ModelStates, self.model_states_callback)
         
         # 移动 landing_area 模型
         self.landing_area_pub = rospy.Publisher('gazebo/set_model_state', ModelState, queue_size=10)
@@ -558,13 +557,17 @@ class UAVLandingEnv(gymnasium.Env):
 
         self.radius = 0.1
         # 无人机当前位置
-        self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
-        # self.position = [g_start_point_x, g_start_point_y, g_start_point_z]
+        if not g_uav_true_value:
+            self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
+        else:
+            self.position = [g_start_point_x, g_start_point_y, g_start_point_z]
+
         # 降落平台当前位置
         self.des = [g_destination_x, g_destination_y, g_destination_z]
         self.cnt = 0
 
-        rospy.Subscriber('/gazebo/model_states', ModelStates, self.model_states_callback)
+        if g_uav_true_value:
+            rospy.Subscriber('/gazebo/model_states', ModelStates, self.model_states_callback)
 
         # self.first_time_after_reset = True
         
@@ -592,15 +595,16 @@ class UAVLandingEnv(gymnasium.Env):
             self.des.clear()
             self.des.extend((position.x, position.y, g_destination_z))  # 假装降落平台的高度是2米
             
-            # # 查找 iris 模型的索引
-            # iris_index = msg.name.index("iris")
-            
-            # # 提取 landing_area 的位置信息
-            # position = msg.pose[iris_index].position
-            
-            # # 将位置信息添加到列表中
-            # self.position.clear()
-            # self.position.extend((position.x, position.y, position.z)) 
+            if g_uav_true_value:
+                # 查找 iris 模型的索引
+                iris_index = msg.name.index("iris")
+                
+                # 提取 landing_area 的位置信息
+                position = msg.pose[iris_index].position
+                
+                # 将位置信息添加到列表中
+                self.position.clear()
+                self.position.extend((position.x, position.y, position.z)) 
 
 
             # 打印位置信息
@@ -611,51 +615,63 @@ class UAVLandingEnv(gymnasium.Env):
             rospy.logwarn("Model 'landing_area' not found in the list of models.")        
 
 
-    def step(self, action):        
-        rospy.wait_for_service('/gazebo/unpause_physics')
-        try:
-            self.unpause()
-        except (rospy.ServiceException) as e:
-            print ("/gazebo/unpause_physics service call failed")
+    def step(self, action):   
+        # 记录执行动作之前的状态
+        old_position = np.array([self.position[0], self.position[1], self.position[2]])
 
         done_reason = ''
         cmd = ''
         margin = 0.3
 
 
+        # 恢复仿真     
+        rospy.wait_for_service('/gazebo/unpause_physics')
+        try:
+            self.unpause()
+        except (rospy.ServiceException) as e:
+            print ("/gazebo/unpause_physics service call failed")
+
+        # 执行动作
         if type(action) == np.ndarray  and action.size == 3:
             cmd = f'setVelocity#{action[0]}#{action[1]}#{action[2]}'
 
+        data = self.simHandler.operate(cmd)
+        time.sleep(0.05)
+        data = self.simHandler.getState()
 
+        if not g_uav_true_value:
+            self.position = [round(data[i], 2) for i in range(3)]
+        else:
+            self.position = [round(self.position[i], 2) for i in range(3)]
 
+        # 暂停仿真
+        rospy.wait_for_service('/gazebo/pause_physics')
+        try:
+            self.pause()
+        except (rospy.ServiceException) as e:
+            print ("/gazebo/pause_physics service call failed")
+
+        # 打印
+        print("act: ", ', '.join(f"{a:.2f}" for a in action))
         print("uav: ", ', '.join(f"{pos:.2f}" for pos in self.position))
         print("tgt: ", ", ".join(f"{num:.2f}" for num in self.des))
 
+        height = abs(self.des[2] - self.position[2])
+        distance = self.cal_distence(self.position, self.des)
+        print(f"hight: {height:.2f}, dist: {distance:.2f}")
+        print("---")
 
+        # 计算奖励
         ttt = []
         ttt.append(self.des[0] - self.position[0])
         ttt.append(self.des[1] - self.position[1])
         ttt.append(self.des[2] - self.position[2])
 
         reward = 0
-        reward = self.cal_reward(ttt[:3], action[:3])   
-
-
-        old_position = np.array([self.position[0], self.position[1], self.position[2]])
-
-        data = self.simHandler.operate(cmd)
-        time.sleep(0.05)
-        data = self.simHandler.getState()
-        self.position = [round(data[i], 2) for i in range(3)]
-        # self.position = [round(self.position[i], 2) for i in range(3)]
-
-        height = abs(self.des[2] - self.position[2])
-        distance = self.cal_distence(self.position, self.des)
-        print(f"hight: {height:.2f}, dist: {distance:.2f}")
-        print("---")
-        
         done = False
+        reward = self.cal_reward(action[:3], ttt[:3])   
 
+        # 判断是否降落成功
         if distance < g_landing_tolerance and height < g_landing_tolerance:
             done = True
             done_reason = 'finish'
@@ -674,8 +690,7 @@ class UAVLandingEnv(gymnasium.Env):
             reward += position_penalty + impact_penalty + success_reward
      
 
-# ---        
-        # fail reward
+        # 超出范围
         if (np.abs(self.position[0]) > g_max_x+1 or
                 np.abs(self.position[1]) > g_max_y+1 or
                 self.position[2] > g_max_z):
@@ -684,15 +699,17 @@ class UAVLandingEnv(gymnasium.Env):
             if done and done_reason == '':
                 done_reason = 'out of map'
 
-        # ===== 时间效率惩罚 =====
+        # 时间效率惩罚
         reward -= 0.2  # 每步微小惩罚鼓励快速决策
 
+        # 超时
         self.cnt += 1
         if self.cnt > 200:
             done = True
             done_reason = 'timeout'
             reward -= 500
 
+        # 过低
         if self.position[2] < g_crash_shreshold:
             done = True
             done_reason = 'crash'
@@ -733,22 +750,13 @@ class UAVLandingEnv(gymnasium.Env):
             if g_eval:
                 self.recorder.stop_new_trajectory()
 
-        
-        print(f"done: {done}-({done_reason}), reward: {reward:.2f}, ")
+        print(f"done: {done}-({done_reason}), reward: {reward:.2f}")
 
 
-        # trans relative position
+        # 返回下一状态
         data[0] = self.des[0] - data[0] 
         data[1] = self.des[1] - data[1] 
         data[2] = self.des[2] - data[2]
-
-        # for idx in range(len(data)):
-        #     if idx < 3:
-        #         data[idx] = (data[idx] + 5) / 10
-        #     else:
-        #         if data[idx] > 10 or data[idx] == np.inf:
-        #             data[idx] = 10
-        #         data[idx] = (data[idx] - 0.2) / 9.8
 
         state = data
 
@@ -756,11 +764,6 @@ class UAVLandingEnv(gymnasium.Env):
             state = np.zeros([len(data)])
             done = True
             reward = 0
-
-        # print('@env@ observation:' + str(state))
-        # print('@env@ reward:' + str(reward))
-        # print('@env@ done:' + str(done))
-        # print("---------------- end ------------------")
 
         return state, reward, done, {'done_reason': done_reason}
 
@@ -942,41 +945,40 @@ class UAVLandingEnv(gymnasium.Env):
         return new_distance
 
     # 计算奖励
-    def cal_reward(self, v1, v2):
+    def cal_reward(self, v_action, v_distance):
         """
-        v1: 三维速度向量 [vx, vy, vz]
-        v2: 三维相对位置 [dx, dy, dz]
+        v_action: 三维速度向量 [vx, vy, vz]
+        v_distance: 三维相对位置 [dx, dy, dz]
         """
-        # 计算基础指标
-        distance_3d = np.linalg.norm(v2)
-        speed_3d = np.linalg.norm(v1)
-        height = abs(v2[2])                         # 当前高度差
-        horizontal_speed = np.linalg.norm(v1[:2])   # 提取水平速度分量
+        # 计算基础指标        
+        speed_3d = np.linalg.norm(v_action)
+        distance_3d = np.linalg.norm(v_distance)
+
+        height = abs(v_distance[2])                         # 当前高度差
+        horizontal_speed = np.linalg.norm(v_action[:2])   # 提取水平速度分量
         
-        # 1. 接近奖励（指数衰减） [0, 4]
-        # proximity_reward = 2.0 / (1.0 + distance_3d)
-        proximity_reward = 0
+        # 1. 接近奖励（指数衰减） [0, 1]
+        proximity_reward = 1.0 / (1.0 + distance_3d)
+        # proximity_reward = 0
         
-        # 2. 方向一致性奖励  [-2, 2]
-        if distance_3d > 0.1:
-            direction_dot = np.dot(v1, v2) / (speed_3d * distance_3d + 1e-8)
+        # 2. 方向一致性奖励  [-1, 1]
+        if distance_3d > g_landing_tolerance:
+            direction_dot = np.dot(v_action, v_distance) / (speed_3d * distance_3d + 1e-8)
             direction_reward = 1 * direction_dot
         else:
             direction_reward = 0.0
-
-        direction_reward =+ np.dot(v1, v2) / (speed_3d * distance_3d + 1e-8) * speed_3d
         
         # 3. 高度相关速度控制
         vertical_reward = 0.0
         # if height < 2.5:  # 当高度低于5米时激活
         #     # 理想下降速度：高度越低速度越慢
         #     ideal_vz = -0.4 * height
-        #     vz_diff = abs(v1[2] - ideal_vz)
+        #     vz_diff = abs(v_action[2] - ideal_vz)
         #     vertical_reward = -0.5 * vz_diff
             
         #     # 着陆阶段严格限制（高度<1米）
         #     if height < 1.0:
-        #         vertical_reward += -0.5 * abs(v1[2])  # 零速奖励
+        #         vertical_reward += -0.5 * abs(v_action[2])  # 零速奖励
         
         # 4. 平面速度惩罚（动态权重）
         speed_penalty = 0.0

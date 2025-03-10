@@ -29,9 +29,9 @@ import argparse
 
 
 # 在每次开始测试之前，修改这些测试参数
-test_time = "0304-2330"
-restore_from = 5000
-test_numbers = 10
+test_time = "0310-0909"
+restore_from = 4900
+test_numbers = 100
 
 
 checkpoints_path = './checkpoints/'+test_time

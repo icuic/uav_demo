@@ -27,7 +27,7 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0304-2330"
+test_time = "0311-0700"
 checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
     algorithm = 'ddpg'
     restore_from_checkpoint = False
-    restore_from = 7000
+    restore_from = 500
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
@@ -104,13 +104,13 @@ if __name__ == "__main__":
     else:
         actor_lr = 3e-4
         critic_lr = 3e-3
-        hidden_dim = 64
+        hidden_dim = 64*2
         gamma = 0.98
         tau = 0.005  # 软更新参数
-        buffer_size = 10000
+        buffer_size = 20000
         minimal_size = 8000
-        batch_size = 64
-        sigma = 0.1  # 高斯噪声标准差
+        batch_size = 64*2
+        sigma = 0.2  # 高斯噪声标准差
         total_iterated = 0
 
     state_dim = env.observation_space.shape[0]
