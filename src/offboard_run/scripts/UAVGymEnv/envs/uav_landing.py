@@ -645,11 +645,11 @@ class UAVLandingEnv(gymnasium.Env):
             self.position = [round(self.position[i], 2) for i in range(3)]
 
         # 暂停仿真
-        rospy.wait_for_service('/gazebo/pause_physics')
-        try:
-            self.pause()
-        except (rospy.ServiceException) as e:
-            print ("/gazebo/pause_physics service call failed")
+        # rospy.wait_for_service('/gazebo/pause_physics')
+        # try:
+        #     self.pause()
+        # except (rospy.ServiceException) as e:
+        #     print ("/gazebo/pause_physics service call failed")
 
         # 打印
         print("act: ", ', '.join(f"{a:.2f}" for a in action))
@@ -858,6 +858,7 @@ class UAVLandingEnv(gymnasium.Env):
         if g_eval:
             self.recorder.start_new_trajectory()
 
+        # self.pause()
         rospy.loginfo("Env is reset.")
 
         return np.array(state, dtype=np.float32), {'distance':abs(g_start_point_x-g_destination_x)+abs(g_start_point_y-g_destination_y), 'dest':(g_destination_x, g_destination_y)}
