@@ -17,7 +17,7 @@ from std_msgs.msg import Header
 
 from gazebo_msgs.msg import ModelStates, ModelState
 
-from threading import Thread, Event as ThreadingEvent
+from threading import Thread, Event as ThreadingEvent, Lock
 
 from pymavlink import mavutil
 
@@ -532,6 +532,8 @@ class UAVLandingEnv(gymnasium.Env):
         self.total_time = 0.0
         self.landing_results = []
 
+        self.lock = Lock()
+
         rospy.init_node("offb_test")
 
         rospy.wait_for_service('/gazebo/unpause_physics', 30)
@@ -569,12 +571,6 @@ class UAVLandingEnv(gymnasium.Env):
         if g_uav_true_value:
             rospy.Subscriber('/gazebo/model_states', ModelStates, self.model_states_callback)
 
-        # self.first_time_after_reset = True
-        
-        # self.last_position = np.zeros(3, dtype=float) # poistion in last step
-        # self.last_speed = np.zeros(3, dtype=float)
-        # self.last_shaping = 0
-
         if g_eval:
             self.recorder = DroneAndPlatformTrajectoryRecorder()
 
@@ -599,7 +595,7 @@ class UAVLandingEnv(gymnasium.Env):
                 # 查找 iris 模型的索引
                 iris_index = msg.name.index("iris")
                 
-                # 提取 landing_area 的位置信息
+                # 提取 iris 的位置信息
                 position = msg.pose[iris_index].position
                 
                 # 将位置信息添加到列表中
@@ -619,17 +615,38 @@ class UAVLandingEnv(gymnasium.Env):
         # 记录执行动作之前的状态
         old_position = np.array([self.position[0], self.position[1], self.position[2]])
 
-        done_reason = ''
         cmd = ''
         margin = 0.3
+        done_reason = ''
+
+        reward = 0
+        done = False
+
+
+        # 计算奖励
+        _state = np.subtract(self.des, self.position)
+        reward = self.cal_reward(action[:3], _state[:3])   
+
+        # 打印
+        print("a_t: ", ', '.join(f"{a:.2f}" for a in action))       # a_t
+        print("s_t: ", ', '.join(f"{pos:.2f}" for pos in _state))      # s_t
+
+        print("uav: ", ', '.join(f"{pos:.2f}" for pos in self.position))    # 无人机当前位置
+        print("tgt: ", ", ".join(f"{num:.2f}" for num in self.des))         # 目标位置
+
+        height = abs(self.des[2] - self.position[2])
+        distance = self.cal_distence(self.position, self.des)
+        print(f"hight_t: {height:.2f}, dist_t: {distance:.2f}")
 
 
         # 恢复仿真     
         rospy.wait_for_service('/gazebo/unpause_physics')
         try:
             self.unpause()
+            print("unpause physics in step")
         except (rospy.ServiceException) as e:
-            print ("/gazebo/unpause_physics service call failed")
+            print ("/gazebo/unpause_physics service call failed in step")
+
 
         # 执行动作
         if type(action) == np.ndarray  and action.size == 3:
@@ -644,32 +661,16 @@ class UAVLandingEnv(gymnasium.Env):
         else:
             self.position = [round(self.position[i], 2) for i in range(3)]
 
-        # 暂停仿真
-        # rospy.wait_for_service('/gazebo/pause_physics')
-        # try:
-        #     self.pause()
-        # except (rospy.ServiceException) as e:
-        #     print ("/gazebo/pause_physics service call failed")
 
-        # 打印
-        print("act: ", ', '.join(f"{a:.2f}" for a in action))
-        print("uav: ", ', '.join(f"{pos:.2f}" for pos in self.position))
-        print("tgt: ", ", ".join(f"{num:.2f}" for num in self.des))
-
+        # 计算高度和距离
+        print("---")
+        print("uav_t+1: ", ', '.join(f"{pos:.2f}" for pos in self.position))    # 无人机新的位置
+        print("tgt_t+1: ", ", ".join(f"{num:.2f}" for num in self.des))         # 目标新的位置
+        
         height = abs(self.des[2] - self.position[2])
         distance = self.cal_distence(self.position, self.des)
-        print(f"hight: {height:.2f}, dist: {distance:.2f}")
+        print(f"hight_t+1: {height:.2f}, dist_t+1: {distance:.2f}")
         print("---")
-
-        # 计算奖励
-        ttt = []
-        ttt.append(self.des[0] - self.position[0])
-        ttt.append(self.des[1] - self.position[1])
-        ttt.append(self.des[2] - self.position[2])
-
-        reward = 0
-        done = False
-        reward = self.cal_reward(action[:3], ttt[:3])   
 
         # 判断是否降落成功
         if distance < g_landing_tolerance and height < g_landing_tolerance:
@@ -750,6 +751,14 @@ class UAVLandingEnv(gymnasium.Env):
             if g_eval:
                 self.recorder.stop_new_trajectory()
 
+        # 暂停仿真
+        rospy.wait_for_service('/gazebo/pause_physics')
+        try:
+            self.pause()
+            print("pause physics in step")
+        except (rospy.ServiceException) as e:
+            print ("/gazebo/pause_physics service call failed in step")
+
         print(f"done: {done}-({done_reason}), reward: {reward:.2f}")
 
 
@@ -777,30 +786,12 @@ class UAVLandingEnv(gymnasium.Env):
         g_start_point_y = round(random.uniform(-1*g_max_y, g_max_y), 1)
         g_start_point_z = g_start_point_z
         
-        # g_destination_x = round(random.uniform(-1*g_max_x, g_max_x), 1)
-        # g_destination_y = round(random.uniform(-1*g_max_y, g_max_y), 1)
-        # g_destination_z = g_start_point_z
-
-        # g_start_point_x = 2
-        # g_start_point_y = 3
-        # g_start_point_z = g_start_point_z
-        
-        # g_destination_x = 3
-        # g_destination_y = 3
-        # g_destination_z = 2
-
-        # g_start_point_x, g_start_point_y, g_start_point_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
-        # g_destination_x, g_destination_y, g_destination_z = np.random.randint([[-1*g_max_x, -1*g_max_y, 10]], [[g_max_x, g_max_y, 10+1]], size=3).tolist()
-        
         self.position = [g_start_point_x, g_start_point_y, g_start_point_z]
        
 
         print("start point: ", ' '.join(f"{pos:.2f}" for pos in self.position))
         # print("destination: ", ' '.join(f"{pos:.2f}" for pos in self.des))
 
-        # self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
-        # self.simHandler.set_pos()
-        # self.simHandler.resetVelocity(0, 0)
         self.simHandler.setRaw(0, g_start_point_x, g_start_point_y, g_start_point_z, 0, 0, 0)
 
         # 移动降落平台至目的地
@@ -808,28 +799,29 @@ class UAVLandingEnv(gymnasium.Env):
     
         # 创建新线程，专门用于发布话题
         # 初始化运动参数
-        x, y = 0.0, 0.0
-        if self.motion_type == 'static':
-            # 随机生成[-5,5]范围内的初始位置
-            x = round(random.uniform(-5, 5), 2)
-            y = round(random.uniform(-5, 5), 2)
-        elif self.motion_type == 'linear':
-            # 初始化在起点(4,4)
-            x, y = 4.0, 4.0
-            self.direction = -1
-        elif self.motion_type == 'circular':
-            # 圆周运动初始角度
-            self.angle = 0
-            self.landing_area_radius = 4  # 半径设为4米
+        with self.lock:
+            x, y = 0.0, 0.0
+            if self.motion_type == 'static':
+                # 随机生成[-5,5]范围内的初始位置
+                x = round(random.uniform(-5, 5), 2)
+                y = round(random.uniform(-5, 5), 2)
+            elif self.motion_type == 'linear':
+                # 初始化在起点(4,4)
+                x, y = 4.0, 4.0
+                self.direction = -1
+            elif self.motion_type == 'circular':
+                # 圆周运动初始角度
+                self.angle = 0
+                self.landing_area_radius = 4  # 半径设为4米
 
-        g_destination_x , g_destination_y = x, y
-        self.des = [g_destination_x, g_destination_y, g_destination_z]
+            g_destination_x , g_destination_y = x, y
+            self.des = [g_destination_x, g_destination_y, g_destination_z]
 
-        self.landing_area_thread = Thread(target=self.move_landing_area, args=(x, y), name="move_landing_area_thread")
-        self.landing_area_thread.daemon = True
-        self.landing_area_thread.start()     
-        self.direction = -1  # 运动方向，1 表示从 (0, 0) 到 (3, 3)，-1 表示从 (3, 3) 到 (0, 0)
-        self.stop_event.clear()
+            self.landing_area_thread = Thread(target=self.move_landing_area, args=(x, y), name="move_landing_area_thread")
+            self.landing_area_thread.daemon = True
+            self.landing_area_thread.start()     
+            self.direction = -1  # 运动方向，1 表示从 (0, 0) 到 (3, 3)，-1 表示从 (3, 3) 到 (0, 0)
+            self.stop_event.clear()
 
         # rospy.wait_for_service('/gazebo/reset_world')
         # try:
@@ -837,7 +829,15 @@ class UAVLandingEnv(gymnasium.Env):
         # except rospy.ServiceException as e:
         #     print ("@env@ /gazebo/reset_world service call failed")
 
-        # self.unpause()
+
+        # 恢复仿真     
+        rospy.wait_for_service('/gazebo/unpause_physics')
+        try:
+            self.unpause()
+            print("unpause physics in reset")
+        except (rospy.ServiceException) as e:
+            print ("/gazebo/unpause_physics service call failed on reset")
+        
 
         data = self.simHandler.takeoff()
 
@@ -848,17 +848,23 @@ class UAVLandingEnv(gymnasium.Env):
         data[2] = self.des[2] - data[2]      
 
         state = data
-
-        # if 'nan' in str(state):
-        #     state = np.zeros([len(state)])
-
+        
         self.cnt = 0
         # self.first_time_after_reset = True
 
         if g_eval:
             self.recorder.start_new_trajectory()
 
-        # self.pause()
+
+        # 暂停仿真     
+        rospy.wait_for_service('/gazebo/pause_physics')
+        try:
+            self.pause()
+            print("pause physics in reset")
+        except (rospy.ServiceException) as e:
+            print ("/gazebo/pause_physics service call failed on reset")
+
+
         rospy.loginfo("Env is reset.")
 
         return np.array(state, dtype=np.float32), {'distance':abs(g_start_point_x-g_destination_x)+abs(g_start_point_y-g_destination_y), 'dest':(g_destination_x, g_destination_y)}
@@ -868,62 +874,46 @@ class UAVLandingEnv(gymnasium.Env):
         frq = 30
         rate = rospy.Rate(frq)
         
-        # # 初始化运动参数
-        # x, y = 0.0, 0.0
-        # if self.motion_type == 'static':
-        #     # 随机生成[-5,5]范围内的初始位置
-        #     x = random.uniform(-5, 5)
-        #     y = random.uniform(-5, 5)
-
-        # elif self.motion_type == 'linear':
-        #     # 初始化在起点(4,4)
-        #     x, y = 4.0, 4.0
-        #     self.direction = -1
-        # elif self.motion_type == 'circular':
-        #     # 圆周运动初始角度
-        #     self.angle = 0
-        #     self.landing_area_radius = 3  # 半径设为3米
-
         self.stop_event.clear()
 
         while not self.stop_event.is_set():
-        # while True:
-            if self.motion_type == 'static':
-                pass  # 保持静止
-            
-            elif self.motion_type == 'linear':
-                # 在(4,4)和(-4,-4)之间往返
-                if self.direction == 1:  # 向(4,4)移动
-                    if x < 4.0:
-                        x += self.speed / frq
-                        y += self.speed / frq
-                    else:
-                        self.direction = -1
-                else:  # 向(-4,-4)移动
-                    if x > -4.0:
-                        x -= self.speed / frq
-                        y -= self.speed / frq
-                    else:
-                        self.direction = 1
-            
-            elif self.motion_type == 'circular':
-                # 以(0,0)为圆心做圆周运动
-                self.angle += self.speed / frq
-                x = self.landing_area_radius * math.cos(self.angle)
-                y = self.landing_area_radius * math.sin(self.angle)
-            
-            elif self.motion_type == 'random':
-                # 随机运动（保持原有逻辑）
-                x += random.uniform(-self.speed/frq, self.speed/frq)
-                y += random.uniform(-self.speed/frq, self.speed/frq)
-                x = np.clip(x, -5.0, 5.0)
-                y = np.clip(y, -5.0, 5.0)
+            with self.lock:
+                if self.motion_type == 'static':
+                    pass  # 保持静止
+                
+                elif self.motion_type == 'linear':
+                    # 在(4,4)和(-4,-4)之间往返
+                    if self.direction == 1:  # 向(4,4)移动
+                        if x < 4.0:
+                            x += self.speed / frq
+                            y += self.speed / frq
+                        else:
+                            self.direction = -1
+                    else:  # 向(-4,-4)移动
+                        if x > -4.0:
+                            x -= self.speed / frq
+                            y -= self.speed / frq
+                        else:
+                            self.direction = 1
+                
+                elif self.motion_type == 'circular':
+                    # 以(0,0)为圆心做圆周运动
+                    self.angle += self.speed / frq
+                    x = self.landing_area_radius * math.cos(self.angle)
+                    y = self.landing_area_radius * math.sin(self.angle)
+                
+                elif self.motion_type == 'random':
+                    # 随机运动（保持原有逻辑）
+                    x += random.uniform(-self.speed/frq, self.speed/frq)
+                    y += random.uniform(-self.speed/frq, self.speed/frq)
+                    x = np.clip(x, -5.0, 5.0)
+                    y = np.clip(y, -5.0, 5.0)
 
-            self.landing_area_msg.pose.position.x = x
-            self.landing_area_msg.pose.position.y = y
-            self.landing_area_msg.pose.position.z = 0.0
-            self.landing_area_pub.publish(self.landing_area_msg)
-            rate.sleep()
+                self.landing_area_msg.pose.position.x = x
+                self.landing_area_msg.pose.position.y = y
+                self.landing_area_msg.pose.position.z = 0.0
+                self.landing_area_pub.publish(self.landing_area_msg)
+                rate.sleep()
 
 
     def cmp_distence(self, old_position, new_position, destination):
@@ -1039,27 +1029,7 @@ class UAVLandingEnv(gymnasium.Env):
         ret = 0
         # 计算 xy 平面的距离
         dist = math.sqrt(x_distance ** 2 + y_distance ** 2)
-        # if 0 < dist < 0.8:
-        #     if 0 <= abs(height) <= 0.1:
-        #         ret = 0
-        #     elif 0.1 < abs(height) <= 3.5:
-        #         ret = 0.5 * height
-        #     elif abs(height) > 3.5:
-        #         ret = 0.5 * height
-        # elif 0.8 <= dist <= 4:
-        #     if 0 <= abs(height) <= 0.1:
-        #         ret = 0.5 * height
-        #     elif 0.1 < abs(height) <= 3.5:
-        #         ret = 0.5 * height
-        #     elif abs(height) > 3.5:
-        #         ret = 0.5 * height
-        # elif dist > 4:
-        #     if 0 <= abs(height) <= 0.1:
-        #         ret = -1
-        #     elif 0.1 < abs(height) <= 3.5:
-        #         ret = -1
-        #     elif abs(height) > 3.5:
-        #         ret = 0
+
 
         if 0 < dist < 1:
             if 0 <= abs(height) <= 0.1:
