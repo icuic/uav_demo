@@ -27,7 +27,7 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0312-1200"
+test_time = "0313-0940"
 checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
@@ -104,12 +104,12 @@ if __name__ == "__main__":
     else:
         actor_lr = 3e-4
         critic_lr = 3e-3
-        hidden_dim = 64*2
+        hidden_dim = 64
         gamma = 0.98
         tau = 0.005  # 软更新参数
-        buffer_size = 20000
+        buffer_size = 10000
         minimal_size = 8000
-        batch_size = 64*2
+        batch_size = 64
         sigma = 0.2  # 高斯噪声标准差
         total_iterated = 0
 

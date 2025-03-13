@@ -67,6 +67,8 @@ g_crash_shreshold = 0.3
 g_eval = False
 g_uav_true_value = True
 
+last_time = 0
+
 class simulationHandler():
 
     def __init__(self):
@@ -612,6 +614,11 @@ class UAVLandingEnv(gymnasium.Env):
 
 
     def step(self, action):   
+        global last_time
+        elapsed_time = time.time() - last_time
+        last_time = time.time()
+        print(f"time exhaust: {elapsed_time}")
+
         # 记录执行动作之前的状态
         old_position = np.array([self.position[0], self.position[1], self.position[2]])
 
@@ -676,45 +683,46 @@ class UAVLandingEnv(gymnasium.Env):
         if distance < g_landing_tolerance and height < g_landing_tolerance:
             done = True
             done_reason = 'finish'
+            reward += 10
 
-            # 着陆精度惩罚（XY平面）
-            horizontal_error = np.linalg.norm([self.des[0]-self.position[0], self.des[1]-self.position[1]]) # XY平面误差
-            position_penalty = -2.0 * horizontal_error
+            # # 着陆精度惩罚（XY平面）
+            # horizontal_error = np.linalg.norm([self.des[0]-self.position[0], self.des[1]-self.position[1]]) # XY平面误差
+            # position_penalty = -2.0 * horizontal_error
             
-            # 冲击速度惩罚（指数增长）
-            speed_vertical = abs(action[2])               # 垂直速度绝对值
-            impact_penalty = -4.0 * (np.exp(speed_vertical) - 1)
+            # # 冲击速度惩罚（指数增长）
+            # speed_vertical = abs(action[2])               # 垂直速度绝对值
+            # impact_penalty = -4.0 * (np.exp(speed_vertical) - 1)
             
-            # 成功基础奖励
-            success_reward = 500.0 if horizontal_error < g_landing_tolerance - 0.2 else 300.0
+            # # 成功基础奖励
+            # success_reward = 500.0 if horizontal_error < g_landing_tolerance - 0.2 else 300.0
             
-            reward += position_penalty + impact_penalty + success_reward
+            # reward += position_penalty + impact_penalty + success_reward
      
 
         # 超出范围
         if (np.abs(self.position[0]) > g_max_x+1 or
                 np.abs(self.position[1]) > g_max_y+1 or
                 self.position[2] > g_max_z):
-            reward -= 500
+            reward -= 5
             done = True
             if done and done_reason == '':
                 done_reason = 'out of map'
 
         # 时间效率惩罚
-        reward -= 0.2  # 每步微小惩罚鼓励快速决策
+        # reward -= 0.2  # 每步微小惩罚鼓励快速决策
 
         # 超时
         self.cnt += 1
         if self.cnt > 200:
             done = True
             done_reason = 'timeout'
-            reward -= 500
+            reward -= 1
 
         # 过低
         if self.position[2] < g_crash_shreshold:
             done = True
             done_reason = 'crash'
-            reward -= 500
+            reward -= 5
 
         # 如果降落任务完成或超时，就杀掉子线程，停止移动降落平台
         if done:
@@ -769,10 +777,10 @@ class UAVLandingEnv(gymnasium.Env):
 
         state = data
 
-        if 'nan' in str(data):
-            state = np.zeros([len(data)])
-            done = True
-            reward = 0
+        # if 'nan' in str(data):
+        #     state = np.zeros([len(data)])
+        #     done = True
+        #     reward = 0
 
         return state, reward, done, {'done_reason': done_reason}
 
@@ -936,52 +944,83 @@ class UAVLandingEnv(gymnasium.Env):
         return new_distance
 
     # 计算奖励
-    def cal_reward(self, v_action, v_distance):
+    def cal_reward(self, v_action, v_distance, dt=0.05, alpha=0.8, beta=10.0, w_angle=0.7, w_speed=0.3):
         """
         v_action: 三维速度向量 [vx, vy, vz]
         v_distance: 三维相对位置 [dx, dy, dz]
-        """
-        # 计算基础指标        
-        speed_3d = np.linalg.norm(v_action)
-        distance_3d = np.linalg.norm(v_distance)
 
-        height = abs(v_distance[2])                         # 当前高度差
-        horizontal_speed = np.linalg.norm(v_action[:2])   # 提取水平速度分量
+        dt : float - 时间步长(默认0.05s)
+        alpha : float - 动态速度比例系数(默认0.5)
+        beta : float - 速度奖励衰减系数(默认10.0)
+        w_angle : float - 方向奖励权重(默认0.7)
+        w_speed : float - 速度奖励权重(默认0.3)        
+        """
+
+        # 计算物理约束范围
+        act_max = np.sqrt(3)                   # 速度模长最大值：√3 ≈ 1.732
+        dis_max = np.linalg.norm([2*g_max_x, 2*g_max_y, g_max_z])  # 10x10x10空间对角线：10√3 ≈ 17.32
         
-        # 1. 接近奖励（指数衰减） [0, 1]
-        proximity_reward = 1.0 / (1.0 + distance_3d)
+        # 归一化处理（防止除以零）
+        norm_dis = np.linalg.norm(v_distance) / (dis_max + 1e-8)  # 目标距离归一化到[0,1]
+        norm_act = np.linalg.norm(v_action) / (act_max + 1e-8)  # 速度模长归一化到[0,1]
+
+        # 方向奖励（余弦相似度）
+        dot_product = np.dot(v_action, v_distance)
+        norm_act_denominator = np.linalg.norm(v_action) + 1e-8  # 防止除零
+        norm_dis_denominator = np.linalg.norm(v_distance) + 1e-8
+        cos_sim = dot_product / (norm_act_denominator * norm_dis_denominator)
+
+        # 动态理想速度模型（方案一）
+        v_ideal = min(alpha * norm_dis, 1.0)  # 限制归一化后的理想速度不超过1
+        speed_diff = norm_act - v_ideal
+        speed_reward = np.exp(-beta * (speed_diff ​** 2))  # 高斯型速度奖励
+
+        # 综合奖励
+        return w_angle * cos_sim + w_speed * speed_reward
+
+        # # 计算基础指标        
+        # speed_3d = np.linalg.norm(v_action)
+        # distance_3d = np.linalg.norm(v_distance)
+
+        # height = abs(v_distance[2])                         # 当前高度差
+        # horizontal_speed = np.linalg.norm(v_action[:2])   # 提取水平速度分量
+        
+        # # 1. 接近奖励（指数衰减） [0, 1]
+        # # proximity_reward = 1.0 / (1.0 + distance_3d)
         # proximity_reward = 0
         
-        # 2. 方向一致性奖励  [-1, 1]
-        if distance_3d > g_landing_tolerance:
-            direction_dot = np.dot(v_action, v_distance) / (speed_3d * distance_3d + 1e-8)
-            direction_reward = 1 * direction_dot
-        else:
-            direction_reward = 0.0
+        # # 2. 方向一致性奖励  [-1, 1]
+        # if distance_3d > g_landing_tolerance:
+        #     cosine_angle = np.dot(v_action, v_distance) / (speed_3d * distance_3d + 1e-8)
+        #     direction_reward = 2 * cosine_angle
+        # else:
+        #     direction_reward = 0.0
         
-        # 3. 高度相关速度控制
-        vertical_reward = 0.0
-        # if height < 2.5:  # 当高度低于5米时激活
-        #     # 理想下降速度：高度越低速度越慢
-        #     ideal_vz = -0.4 * height
-        #     vz_diff = abs(v_action[2] - ideal_vz)
-        #     vertical_reward = -0.5 * vz_diff
-            
-        #     # 着陆阶段严格限制（高度<1米）
-        #     if height < 1.0:
-        #         vertical_reward += -0.5 * abs(v_action[2])  # 零速奖励
-        
-        # 4. 平面速度惩罚（动态权重）
-        speed_penalty = 0.0
-        # if distance_3d < 1:  # 当距离目标小于1米时激活
-        #     # 距离越近，对水平速度的惩罚越强（线性增长）
-        #     speed_penalty = -1.0 * (1.0 / (distance_3d + 0.1)) * horizontal_speed
+        # direction_reward += cosine_angle * speed_3d
 
-        # 5. 合成总奖励
-        total_reward = proximity_reward + direction_reward + vertical_reward + speed_penalty
+        # # 3. 高度相关速度控制
+        # vertical_reward = 0.0
+        # # if height < 2.5:  # 当高度低于5米时激活
+        # #     # 理想下降速度：高度越低速度越慢
+        # #     ideal_vz = -0.4 * height
+        # #     vz_diff = abs(v_action[2] - ideal_vz)
+        # #     vertical_reward = -0.5 * vz_diff
+            
+        # #     # 着陆阶段严格限制（高度<1米）
+        # #     if height < 1.0:
+        # #         vertical_reward += -0.5 * abs(v_action[2])  # 零速奖励
         
-        # 6. 着陆质量评估（在step函数中处理）
-        return total_reward
+        # # 4. 平面速度惩罚（动态权重）
+        # speed_penalty = 0.0
+        # # if distance_3d < 1:  # 当距离目标小于1米时激活
+        # #     # 距离越近，对水平速度的惩罚越强（线性增长）
+        # #     speed_penalty = -1.0 * (1.0 / (distance_3d + 0.1)) * horizontal_speed
+
+        # # 5. 合成总奖励
+        # total_reward = proximity_reward + direction_reward + vertical_reward + speed_penalty
+        
+        # # 6. 着陆质量评估（在step函数中处理）
+        # return total_reward
 
     def close(self):
         self.simHandler.reset()
