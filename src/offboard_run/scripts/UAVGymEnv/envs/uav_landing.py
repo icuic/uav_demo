@@ -617,7 +617,7 @@ class UAVLandingEnv(gymnasium.Env):
         global last_time
         elapsed_time = time.time() - last_time
         last_time = time.time()
-        print(f"time exhaust: {elapsed_time}")
+        # print(f"time exhaust: {elapsed_time:.3f}")
 
         # 记录执行动作之前的状态
         old_position = np.array([self.position[0], self.position[1], self.position[2]])
@@ -944,7 +944,7 @@ class UAVLandingEnv(gymnasium.Env):
         return new_distance
 
     # 计算奖励
-    def cal_reward(self, v_action, v_distance, dt=0.05, alpha=0.8, beta=10.0, w_angle=0.7, w_speed=0.3):
+    def cal_reward(self, v_action, v_distance, dt=0.05, alpha=1.0, beta=10.0, w_angle=0.7, w_speed=0.3):
         """
         v_action: 三维速度向量 [vx, vy, vz]
         v_distance: 三维相对位置 [dx, dy, dz]
@@ -971,56 +971,14 @@ class UAVLandingEnv(gymnasium.Env):
         cos_sim = dot_product / (norm_act_denominator * norm_dis_denominator)
 
         # 动态理想速度模型（方案一）
-        v_ideal = min(alpha * norm_dis, 1.0)  # 限制归一化后的理想速度不超过1
+        # v_ideal = min(alpha * norm_dis, 1.0)  # 限制归一化后的理想速度不超过1
+        v_ideal = alpha * norm_dis
         speed_diff = norm_act - v_ideal
-        speed_reward = np.exp(-beta * (speed_diff ​** 2))  # 高斯型速度奖励
+        speed_reward = np.exp(-beta * (speed_diff ** 2))  # 高斯型速度奖励
 
         # 综合奖励
-        return w_angle * cos_sim + w_speed * speed_reward
+        return w_angle * cos_sim + w_speed * speed_reward * cos_sim
 
-        # # 计算基础指标        
-        # speed_3d = np.linalg.norm(v_action)
-        # distance_3d = np.linalg.norm(v_distance)
-
-        # height = abs(v_distance[2])                         # 当前高度差
-        # horizontal_speed = np.linalg.norm(v_action[:2])   # 提取水平速度分量
-        
-        # # 1. 接近奖励（指数衰减） [0, 1]
-        # # proximity_reward = 1.0 / (1.0 + distance_3d)
-        # proximity_reward = 0
-        
-        # # 2. 方向一致性奖励  [-1, 1]
-        # if distance_3d > g_landing_tolerance:
-        #     cosine_angle = np.dot(v_action, v_distance) / (speed_3d * distance_3d + 1e-8)
-        #     direction_reward = 2 * cosine_angle
-        # else:
-        #     direction_reward = 0.0
-        
-        # direction_reward += cosine_angle * speed_3d
-
-        # # 3. 高度相关速度控制
-        # vertical_reward = 0.0
-        # # if height < 2.5:  # 当高度低于5米时激活
-        # #     # 理想下降速度：高度越低速度越慢
-        # #     ideal_vz = -0.4 * height
-        # #     vz_diff = abs(v_action[2] - ideal_vz)
-        # #     vertical_reward = -0.5 * vz_diff
-            
-        # #     # 着陆阶段严格限制（高度<1米）
-        # #     if height < 1.0:
-        # #         vertical_reward += -0.5 * abs(v_action[2])  # 零速奖励
-        
-        # # 4. 平面速度惩罚（动态权重）
-        # speed_penalty = 0.0
-        # # if distance_3d < 1:  # 当距离目标小于1米时激活
-        # #     # 距离越近，对水平速度的惩罚越强（线性增长）
-        # #     speed_penalty = -1.0 * (1.0 / (distance_3d + 0.1)) * horizontal_speed
-
-        # # 5. 合成总奖励
-        # total_reward = proximity_reward + direction_reward + vertical_reward + speed_penalty
-        
-        # # 6. 着陆质量评估（在step函数中处理）
-        # return total_reward
 
     def close(self):
         self.simHandler.reset()
