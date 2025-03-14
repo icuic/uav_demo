@@ -77,8 +77,8 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     algorithm = 'ddpg'
-    restore_from_checkpoint = False
-    restore_from = 500
+    restore_from_checkpoint = True
+    restore_from = 2250
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
@@ -99,7 +99,8 @@ if __name__ == "__main__":
             buffer_size = d.get('buffer_size')
             minimal_size = d.get('minimal_size')
             batch_size = d.get('batch_size')
-            sigma = d.get('sigma')
+            # sigma = d.get('sigma')
+            sigma = 0.15
             total_iterated = d.get('total_iterated')
     else:
         actor_lr = 3e-4
