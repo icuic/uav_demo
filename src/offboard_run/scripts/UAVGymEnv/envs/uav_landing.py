@@ -683,7 +683,7 @@ class UAVLandingEnv(gymnasium.Env):
         if distance < g_landing_tolerance and height < g_landing_tolerance:
             done = True
             done_reason = 'finish'
-            reward += 10
+            reward += 100
 
             # # 着陆精度惩罚（XY平面）
             # horizontal_error = np.linalg.norm([self.des[0]-self.position[0], self.des[1]-self.position[1]]) # XY平面误差
@@ -703,7 +703,7 @@ class UAVLandingEnv(gymnasium.Env):
         if (np.abs(self.position[0]) > g_max_x+1 or
                 np.abs(self.position[1]) > g_max_y+1 or
                 self.position[2] > g_max_z):
-            reward -= 5
+            reward -= 50
             done = True
             if done and done_reason == '':
                 done_reason = 'out of map'
@@ -716,13 +716,13 @@ class UAVLandingEnv(gymnasium.Env):
         if self.cnt > 200:
             done = True
             done_reason = 'timeout'
-            reward -= 1
+            reward -= 100
 
         # 过低
         if self.position[2] < g_crash_shreshold:
             done = True
             done_reason = 'crash'
-            reward -= 5
+            reward -= 50
 
         # 如果降落任务完成或超时，就杀掉子线程，停止移动降落平台
         if done:
