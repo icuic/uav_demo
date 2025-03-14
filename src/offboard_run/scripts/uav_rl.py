@@ -46,12 +46,12 @@ def load_return_list(i, path):
     with open(f"{path}/{i}_return_list.pkl", 'rb') as f:
         return pickle.load(f)
 
-def save_steps_distance_list(i, path, steps_distance_list):
-    with open(f"{path}/{i}_step_distance_list.pkl", 'wb') as f:
-        pickle.dump(steps_distance_list, f)
+def save_success_rate_list(i, path, success_rate_list):
+    with open(f"{path}/{i}_success_rate_list.pkl", 'wb') as f:
+        pickle.dump(success_rate_list, f)
 
-def load_steps_distance_list(i, path):
-    with open(f"{path}/{i}_step_distance_list.pkl", 'rb') as f:
+def load_success_rate_list(i, path):
+    with open(f"{path}/{i}_success_rate_list.pkl", 'rb') as f:
         return pickle.load(f)
 
 def save_reason_list(i, path, reason_list):
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     algorithm = 'ddpg'
-    restore_from_checkpoint = False
+    restore_from_checkpoint = True
     restore_from = 2250
     episode_from = 0
 
@@ -99,8 +99,8 @@ if __name__ == "__main__":
             buffer_size = d.get('buffer_size')
             minimal_size = d.get('minimal_size')
             batch_size = d.get('batch_size')
-            sigma = d.get('sigma')
-            # sigma = 0.15
+            # sigma = d.get('sigma')
+            sigma = 0.15
             total_iterated = d.get('total_iterated')
     else:
         actor_lr = 3e-4
@@ -131,14 +131,14 @@ if __name__ == "__main__":
 
     return_list = []
     reason_list = []
-    steps_distance_list = []
+    success_rate_list = []
 
     if restore_from_checkpoint:
         replay_buffer.load(f"{checkpoints_path}/{restore_from}_buffer.pth")       
         agent.load(checkpoints_path, restore_from)        
         return_list = load_return_list(restore_from, checkpoints_path)
         reason_list = load_reason_list(restore_from, checkpoints_path)
-        steps_distance_list = load_steps_distance_list(restore_from, checkpoints_path)
+        success_rate_list = load_success_rate_list(restore_from, checkpoints_path)
 
     early_stop = False
     continue_times = 0
@@ -204,17 +204,18 @@ if __name__ == "__main__":
             agent.set_epsilon(epsilon)
 
         return_list.append(episode_return)
-        reason_list.append(_['done_reason'])
-        # steps_distance_list.append(round(i_step/distance, 2))
+        reason_list.append(_['done_reason'])        
         reason_fifo_list.append(_['done_reason'])
+
         len_reason_fifo_list = len(reason_fifo_list)
         rate_success = reason_fifo_list.count('finish') / len_reason_fifo_list
         rate_timeout = reason_fifo_list.count('timeout') / len_reason_fifo_list
         rate_crash = reason_fifo_list.count('crash') / len_reason_fifo_list
         rate_outmap = reason_fifo_list.count('out of map') / len_reason_fifo_list
-        print(f"success: {rate_success:.2f}, timeout: {rate_timeout:.2f}, crash: {rate_crash:.2f}, outmap: {rate_outmap:.2f}, len_fifo: {len_reason_fifo_list}, learning: {replay_buffer.size() > minimal_size}")
-      
+        print(f"success: {rate_success:.2f}, timeout: {rate_timeout:.2f}, crash: {rate_crash:.2f}, outmap: {rate_outmap:.2f}, len_fifo: {len_reason_fifo_list}, learning: {replay_buffer.size() > minimal_size}")      
         print(f'episode: {i_episode}, return: {episode_return:.2f}')
+
+        success_rate_list.append(round(rate_success, 2))
 
         if rate_success >= 0.95:
             continue_times += 1
@@ -228,7 +229,7 @@ if __name__ == "__main__":
             replay_buffer.save(f"{checkpoints_path}/{i_episode}_buffer.pth")
             save_return_list(i_episode, checkpoints_path, return_list)
             save_reason_list(i_episode, checkpoints_path, reason_list)
-            save_steps_distance_list(i_episode, checkpoints_path, steps_distance_list)
+            save_success_rate_list(i_episode, checkpoints_path, success_rate_list)
 
             parameter_keys = ['episode', 'total_iterated', 'actor_lr', 'critic_lr', 
                             'batch_size', 'tau', 'gamma', 'buffer_size', 'minimal_size', 'sigma', 'hidden_dim']

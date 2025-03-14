@@ -7,7 +7,7 @@ def load_return_list(i, path):
     with open(f"{path}/{i}_return_list.pkl", 'rb') as f:
         return pickle.load(f)
     
-def load_steps_distance_list(i, path):
+def load_success_rate_list(i, path):
     with open(f"{path}/{i}_step_distance_list.pkl", 'rb') as f:
         return pickle.load(f)
     
@@ -19,7 +19,7 @@ def moving_average(a, window_size):
     end = (np.cumsum(a[:-window_size:-1])[::2] / r)[::-1]
     return np.concatenate((begin, middle, end))
 
-a = load_return_list(5000, "./checkpoints/0314-1310")
+a = load_return_list(2200, "./checkpoints/0314-1310")
 # print(a[4900:4950])
 
 episodes_list = list(range(len(a)))
@@ -34,4 +34,15 @@ plt.plot(episodes_list, mv_return)
 plt.xlabel('Episodes')
 plt.ylabel('Returns')
 plt.title('Sliding average per 9 episodes')
-plt.show()      
+plt.show()    
+
+# success rate
+a = load_success_rate_list(2200, "./checkpoints/0314-1310")
+# print(a[4900:4950])
+
+episodes_list = list(range(len(a)))
+plt.plot(episodes_list, a)
+plt.xlabel('Episodes')
+plt.ylabel('Success rate')
+plt.title('Success rate per episode')
+plt.show()
