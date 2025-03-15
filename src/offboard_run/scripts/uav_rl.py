@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
     algorithm = 'ddpg'
     restore_from_checkpoint = True
-    restore_from = 2250
+    restore_from = 2400
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
@@ -139,6 +139,7 @@ if __name__ == "__main__":
         return_list = load_return_list(restore_from, checkpoints_path)
         reason_list = load_reason_list(restore_from, checkpoints_path)
         success_rate_list = load_success_rate_list(restore_from, checkpoints_path)
+        # success_rate_list = []
 
     early_stop = False
     continue_times = 0
@@ -215,7 +216,7 @@ if __name__ == "__main__":
         print(f"success: {rate_success:.2f}, timeout: {rate_timeout:.2f}, crash: {rate_crash:.2f}, outmap: {rate_outmap:.2f}, len_fifo: {len_reason_fifo_list}, learning: {replay_buffer.size() > minimal_size}")      
         print(f'episode: {i_episode}, return: {episode_return:.2f}')
 
-        success_rate_list.append(round(rate_success, 2))
+        success_rate_list.append((round(rate_success, 2), round(rate_timeout, 2), round(rate_crash, 2), round(rate_outmap, 2)))
 
         if rate_success >= 0.95:
             continue_times += 1
