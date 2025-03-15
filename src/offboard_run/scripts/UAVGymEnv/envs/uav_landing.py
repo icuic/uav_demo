@@ -684,26 +684,13 @@ class UAVLandingEnv(gymnasium.Env):
             done = True
             done_reason = 'finish'
             reward += 100
-
-            # # 着陆精度惩罚（XY平面）
-            # horizontal_error = np.linalg.norm([self.des[0]-self.position[0], self.des[1]-self.position[1]]) # XY平面误差
-            # position_penalty = -2.0 * horizontal_error
-            
-            # # 冲击速度惩罚（指数增长）
-            # speed_vertical = abs(action[2])               # 垂直速度绝对值
-            # impact_penalty = -4.0 * (np.exp(speed_vertical) - 1)
-            
-            # # 成功基础奖励
-            # success_reward = 500.0 if horizontal_error < g_landing_tolerance - 0.2 else 300.0
-            
-            # reward += position_penalty + impact_penalty + success_reward
-     
+   
 
         # 超出范围
         if (np.abs(self.position[0]) > g_max_x+1 or
                 np.abs(self.position[1]) > g_max_y+1 or
                 self.position[2] > g_max_z):
-            reward -= 50
+            reward -= 100
             done = True
             if done and done_reason == '':
                 done_reason = 'out of map'
@@ -732,14 +719,14 @@ class UAVLandingEnv(gymnasium.Env):
             if g_eval:
                 if done_reason == 'finish':
                     self.success_count += 1
-                    x_error, y_error = self.des[0] - data[0], self.des[1] - data[1]
+                    x_error, y_error = self.des[0] - self.position[0], self.des[1] - self.position[1]
                     error = np.linalg.norm([x_error, y_error])  # 平面误差    
                     self.total_error += error
                     episode_time = self.recorder.drone_current_trajectory[-1][0] - self.recorder.drone_current_trajectory[0][0]
                     self.total_time += episode_time
                     self.landing_results.append({
                         "success": True,
-                        "landing_point": [data[0], data[1]],
+                        "landing_point": [self.position[0], self.position[1]],
                         "platform_position": [self.des[0], self.des[1]],
                         "time": episode_time,
                         # "trajectory": self.recorder.drone_current_trajectory
@@ -747,7 +734,7 @@ class UAVLandingEnv(gymnasium.Env):
                 else:
                     self.landing_results.append({
                         "success": False,
-                        "landing_point": [data[0], data[1]],
+                        "landing_point": [self.position[0], self.position[1]],
                         "platform_position": [self.des[0], self.des[1]],
                         # "time": episode_time,
                         # "trajectory": self.recorder.drone_current_trajectory
@@ -771,16 +758,11 @@ class UAVLandingEnv(gymnasium.Env):
 
 
         # 返回下一状态
-        data[0] = self.des[0] - data[0] 
-        data[1] = self.des[1] - data[1] 
-        data[2] = self.des[2] - data[2]
-
-        state = data
-
-        # if 'nan' in str(data):
-        #     state = np.zeros([len(data)])
-        #     done = True
-        #     reward = 0
+        state = np.array([
+            (self.des[0] - self.position[0]) / (2 * g_max_x),   # X轴归一化到[-1,1]
+            (self.des[1] - self.position[1]) / (2 * g_max_y),   # Y轴归一化到[-1,1]
+            (self.des[2] - self.position[2]) / (g_max_z)        # Z轴归一化到[-1,1]（因为g_max_z=10）
+        ], dtype=np.float32)
 
         return state, reward, done, {'done_reason': done_reason}
 
@@ -847,18 +829,16 @@ class UAVLandingEnv(gymnasium.Env):
             print ("/gazebo/unpause_physics service call failed on reset")
         
 
-        data = self.simHandler.takeoff()
+        # 返回下一状态
+        state = np.array([
+            (self.des[0] - self.position[0]) / (2 * g_max_x),   # X轴归一化到[-1,1]
+            (self.des[1] - self.position[1]) / (2 * g_max_y),   # Y轴归一化到[-1,1]
+            (self.des[2] - self.position[2]) / (g_max_z)        # Z轴归一化到[-1,1]（因为g_max_z=10）
+        ], dtype=np.float32)
 
-        data[0] = self.des[0] - data[0] 
-        data[1] = self.des[1] - data[1] 
-        # data[2] = self.des[2] - data[2]
-        # 为方便仿真，假设降落平台的高度为2米
-        data[2] = self.des[2] - data[2]      
 
-        state = data
-        
+        # 重置计数器
         self.cnt = 0
-        # self.first_time_after_reset = True
 
         if g_eval:
             self.recorder.start_new_trajectory()
@@ -876,6 +856,7 @@ class UAVLandingEnv(gymnasium.Env):
         rospy.loginfo("Env is reset.")
 
         return np.array(state, dtype=np.float32), {'distance':abs(g_start_point_x-g_destination_x)+abs(g_start_point_y-g_destination_y), 'dest':(g_destination_x, g_destination_y)}
+
 
     def move_landing_area(self, x, y):
         self.landing_area_msg.model_name = 'landing_area'
@@ -944,7 +925,7 @@ class UAVLandingEnv(gymnasium.Env):
         return new_distance
 
     # 计算奖励
-    def cal_reward(self, v_action, v_distance, dt=0.05, alpha=1.0, beta=10.0, w_angle=0.7, w_speed=0.3):
+    def cal_reward(self, v_action, v_distance, dt=0.05, alpha=0.8, beta=10.0, w_angle=0.7, w_speed=0.3):
         """
         v_action: 三维速度向量 [vx, vy, vz]
         v_distance: 三维相对位置 [dx, dy, dz]
@@ -958,7 +939,7 @@ class UAVLandingEnv(gymnasium.Env):
 
         # 计算物理约束范围
         act_max = np.sqrt(3)                   # 速度模长最大值：√3 ≈ 1.732
-        dis_max = np.linalg.norm([2*g_max_x, 2*g_max_y, g_max_z])  # 10x10x10空间对角线：10√3 ≈ 17.32
+        dis_max = np.sqrt(3)  # 动作空间范围假设为 [-1, 1]，则速度模长最大为 √3
         
         # 归一化处理（防止除以零）
         norm_dis = np.linalg.norm(v_distance) / (dis_max + 1e-8)  # 目标距离归一化到[0,1]

@@ -11,28 +11,31 @@ def load_success_rate_list(i, path):
     with open(f"{path}/{i}_success_rate_list.pkl", 'rb') as f:
         return pickle.load(f)
     
-def plot_nth_element(lst, i):
-    # 检查序号 i 是否在有效范围内
-    if i < 0 or i >= len(lst[0]):
-        raise IndexError("序号 i 超出了元素的索引范围。")
-    # 提取每个元素的第 i 个元素
-    nth_elements = [tup[i] for tup in lst]
-    # 生成 x 轴坐标
-    x = range(len(lst))
+def plot_nth_element(lst):
+    # 提取每个元组的元素
+    episodes = [tup[0] for tup in lst]  # 新增：提取 episode 编号
+    success_rates = [tup[1] for tup in lst]
+    timeout_rates = [tup[2] for tup in lst]
+    crash_rates = [tup[3] for tup in lst]
+    outmap_rates = [tup[4] for tup in lst]
+
     alpha = 0.7  # 透明度值
     linestyles = ['-', '--', '-.', ':']
     labels = ["success", "timeout", "crash", "out of map"]
+
     # 绘制图形
-    for i in range(4):
-        nth_elements = [tup[i] for tup in lst]
-        plt.plot(x, nth_elements, alpha=alpha, linestyle=linestyles[i], label=labels[i])
+    plt.plot(episodes, success_rates, alpha=alpha, linestyle=linestyles[0], label=labels[0])
+    plt.plot(episodes, timeout_rates, alpha=alpha, linestyle=linestyles[1], label=labels[1])
+    plt.plot(episodes, crash_rates, alpha=alpha, linestyle=linestyles[2], label=labels[2])
+    plt.plot(episodes, outmap_rates, alpha=alpha, linestyle=linestyles[3], label=labels[3])
+
     # 设置图形标题和坐标轴标签
-    plt.title("")
-    plt.xlabel("episodes")
-    plt.ylabel("rates")
+    plt.title("Termination Reasons by Episode")
+    plt.xlabel("Episode")
+    plt.ylabel("Rate")
 
     # 显示图例
-    plt.legend()    
+    plt.legend()
     # 显示图形
     plt.show()
 
@@ -66,4 +69,4 @@ plt.show()
 
 # success/timeout/crash/out of map rate
 a = load_success_rate_list(restore_from, f"./checkpoints/{test_time}")
-plot_nth_element(a, 0)
+plot_nth_element(a)

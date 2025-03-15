@@ -77,7 +77,7 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     algorithm = 'ddpg'
-    restore_from_checkpoint = True
+    restore_from_checkpoint = False
     restore_from = 2400
     episode_from = 0
 
@@ -178,7 +178,7 @@ if __name__ == "__main__":
 
             i_step += 1
             print(f'{f"{i_episode}/{i_step}-{destination}":-^50}')
-            print(f'action is {action[0], action[1], action[2]}')
+            # print(f'action is {action[0], action[1], action[2]}')
 
             next_state, reward, done, _ = env.step(action)     
             # print(f"exp: state: {state}, action: {action}, reward: {reward}, next_state: {next_state}, done: {done}")
@@ -208,7 +208,8 @@ if __name__ == "__main__":
         reason_list.append(_['done_reason'])        
         reason_fifo_list.append(_['done_reason'])
 
-        len_reason_fifo_list = len(reason_fifo_list)
+        # len_reason_fifo_list = len(reason_fifo_list)
+        len_reason_fifo_list = 100
         rate_success = reason_fifo_list.count('finish') / len_reason_fifo_list
         rate_timeout = reason_fifo_list.count('timeout') / len_reason_fifo_list
         rate_crash = reason_fifo_list.count('crash') / len_reason_fifo_list
@@ -216,7 +217,7 @@ if __name__ == "__main__":
         print(f"success: {rate_success:.2f}, timeout: {rate_timeout:.2f}, crash: {rate_crash:.2f}, outmap: {rate_outmap:.2f}, len_fifo: {len_reason_fifo_list}, learning: {replay_buffer.size() > minimal_size}")      
         print(f'episode: {i_episode}, return: {episode_return:.2f}')
 
-        success_rate_list.append((round(rate_success, 2), round(rate_timeout, 2), round(rate_crash, 2), round(rate_outmap, 2)))
+        success_rate_list.append((i_episode, round(rate_success, 2), round(rate_timeout, 2), round(rate_crash, 2), round(rate_outmap, 2)))
 
         if rate_success >= 0.95:
             continue_times += 1

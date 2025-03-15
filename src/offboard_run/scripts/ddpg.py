@@ -64,6 +64,10 @@ class DDPG:
         action = self.actor(state).detach().cpu().numpy().reshape(-1)
         # 给动作添加噪声，增加探索
         action = action + self.sigma * np.random.randn(self.action_dim)
+
+        # 需要添加截断操作保证动作在合法范围内
+        action = np.clip(action, -1.0, 1.0)  # 新增的截断操作        
+        
         return action
 
     def soft_update(self, net, target_net):
