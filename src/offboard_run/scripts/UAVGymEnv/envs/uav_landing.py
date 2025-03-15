@@ -60,8 +60,8 @@ g_max_y = 5
 g_max_z = 10
 
 # 定义成功降落
-g_landing_tolerance = 0.5
-g_crash_shreshold = 0.3
+g_landing_tolerance = 1.5
+g_crash_shreshold = 0.5
 
 # train or eval
 g_eval = False
@@ -774,7 +774,7 @@ class UAVLandingEnv(gymnasium.Env):
         if self.position[2] < g_crash_shreshold:
             done = True
             done_reason = 'crash'
-            reward -= 50
+            reward -= 100
 
         # 如果降落任务完成或超时，就杀掉子线程，停止移动降落平台
         if done:
