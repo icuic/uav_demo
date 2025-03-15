@@ -69,6 +69,68 @@ g_uav_true_value = True
 
 last_time = 0
 
+def normalize_state(actual_diff):
+    """将实际坐标差值转换为归一化值
+    Args:
+        actual_diff: numpy数组，形状(3,) 表示 [dx, dy, dz]
+    Returns:
+        归一化后的numpy数组，形状(3,)
+    """
+    return np.array([
+        actual_diff[0] / (2 * g_max_x),
+        actual_diff[1] / (2 * g_max_y),
+        actual_diff[2] / g_max_z
+    ], dtype=np.float32)
+
+def denormalize_state(normalized_diff):
+    """将归一化值转换回实际坐标差值
+    Args:
+        normalized_diff: numpy数组，形状(3,) 表示归一化后的差值
+    Returns:
+        实际坐标差值numpy数组，形状(3,)
+    """
+    return np.array([
+        normalized_diff[0] * 2 * g_max_x,
+        normalized_diff[1] * 2 * g_max_y,
+        normalized_diff[2] * g_max_z
+    ], dtype=np.float32)
+
+def normalize_xy(value):
+    """将单个X/Y实际值转换为归一化值
+    Args:
+        value: 标量或numpy数组，X/Y方向的实际差值
+    Returns:
+        归一化后的值（范围[-1,1]）
+    """
+    return np.array(value / (2 * g_max_x), dtype=np.float32)
+
+def denormalize_xy(norm_value):
+    """将归一化的X/Y值转换回实际值
+    Args:
+        norm_value: 标量或numpy数组
+    Returns:
+        实际差值
+    """
+    return np.array(norm_value * 2 * g_max_x, dtype=np.float32)
+
+def normalize_z(value):
+    """将Z实际值转换为归一化值
+    Args:
+        value: 标量或numpy数组，Z方向的实际差值
+    Returns:
+        归一化后的值（范围[-1,1]）
+    """
+    return np.array(value / g_max_z, dtype=np.float32)
+
+def denormalize_z(norm_value):
+    """将归一化的Z值转换回实际值
+    Args:
+        norm_value: 标量或numpy数组
+    Returns:
+        实际差值
+    """
+    return np.array(norm_value * g_max_z, dtype=np.float32)
+
 class simulationHandler():
 
     def __init__(self):
@@ -620,7 +682,7 @@ class UAVLandingEnv(gymnasium.Env):
         # print(f"time exhaust: {elapsed_time:.3f}")
 
         # 记录执行动作之前的状态
-        old_position = np.array([self.position[0], self.position[1], self.position[2]])
+        # old_position = np.array([self.position[0], self.position[1], self.position[2]])
 
         cmd = ''
         margin = 0.3
@@ -631,12 +693,15 @@ class UAVLandingEnv(gymnasium.Env):
 
 
         # 计算奖励
-        _state = np.subtract(self.des, self.position)
-        reward = self.cal_reward(action[:3], _state[:3])   
+        _state = np.subtract(normalize_state(self.des), normalize_state(self.position))
+        _state_to_print = np.subtract(self.des, self.position)
+
+        reward = self.cal_reward(action[:3], _state[:3])
 
         # 打印
+
         print("a_t: ", ', '.join(f"{a:.2f}" for a in action))       # a_t
-        print("s_t: ", ', '.join(f"{pos:.2f}" for pos in _state))      # s_t
+        print("s_t: ", ', '.join(f"{pos:.2f}" for pos in _state_to_print))      # s_t
 
         print("uav: ", ', '.join(f"{pos:.2f}" for pos in self.position))    # 无人机当前位置
         print("tgt: ", ", ".join(f"{num:.2f}" for num in self.des))         # 目标位置
@@ -650,7 +715,7 @@ class UAVLandingEnv(gymnasium.Env):
         rospy.wait_for_service('/gazebo/unpause_physics')
         try:
             self.unpause()
-            print("unpause physics in step")
+            # print("unpause physics in step")
         except (rospy.ServiceException) as e:
             print ("/gazebo/unpause_physics service call failed in step")
 
@@ -750,7 +815,7 @@ class UAVLandingEnv(gymnasium.Env):
         rospy.wait_for_service('/gazebo/pause_physics')
         try:
             self.pause()
-            print("pause physics in step")
+            # print("pause physics in step")
         except (rospy.ServiceException) as e:
             print ("/gazebo/pause_physics service call failed in step")
 
@@ -824,10 +889,11 @@ class UAVLandingEnv(gymnasium.Env):
         rospy.wait_for_service('/gazebo/unpause_physics')
         try:
             self.unpause()
-            print("unpause physics in reset")
+            # print("unpause physics in reset")
         except (rospy.ServiceException) as e:
             print ("/gazebo/unpause_physics service call failed on reset")
         
+        self.simHandler.takeoff()
 
         # 返回下一状态
         state = np.array([
@@ -848,7 +914,7 @@ class UAVLandingEnv(gymnasium.Env):
         rospy.wait_for_service('/gazebo/pause_physics')
         try:
             self.pause()
-            print("pause physics in reset")
+            # print("pause physics in reset")
         except (rospy.ServiceException) as e:
             print ("/gazebo/pause_physics service call failed on reset")
 

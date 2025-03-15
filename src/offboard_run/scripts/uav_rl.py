@@ -27,7 +27,7 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0314-1310"
+test_time = "0315-1500"
 checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
@@ -99,8 +99,8 @@ if __name__ == "__main__":
             buffer_size = d.get('buffer_size')
             minimal_size = d.get('minimal_size')
             batch_size = d.get('batch_size')
-            # sigma = d.get('sigma')
-            sigma = 0.15
+            sigma = d.get('sigma')
+            # sigma = 0.15
             total_iterated = d.get('total_iterated')
     else:
         actor_lr = 3e-4

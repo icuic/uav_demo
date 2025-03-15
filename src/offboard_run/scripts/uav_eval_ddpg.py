@@ -29,7 +29,7 @@ import argparse
 
 
 # 在每次开始测试之前，修改这些测试参数
-test_time = "0313-0940"
+test_time = "0315-1500"
 restore_from = 2100
 test_numbers = 100
 
