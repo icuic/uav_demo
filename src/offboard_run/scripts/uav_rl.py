@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
     algorithm = 'ddpg'
     restore_from_checkpoint = True
-    restore_from = 950
+    restore_from = 2650
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
