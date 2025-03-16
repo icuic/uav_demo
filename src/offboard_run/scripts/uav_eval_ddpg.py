@@ -29,7 +29,7 @@ import argparse
 
 
 # 在每次开始测试之前，修改这些测试参数
-test_time = "0315-1500(2m-91pct-950-2000)"
+test_time = "0315-1500(1.5m-87pct-2650-2750)"
 restore_from = 950
 test_numbers = 100
 

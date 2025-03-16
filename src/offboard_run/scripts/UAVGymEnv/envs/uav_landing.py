@@ -755,7 +755,7 @@ class UAVLandingEnv(gymnasium.Env):
         if (np.abs(self.position[0]) > g_max_x+1 or
                 np.abs(self.position[1]) > g_max_y+1 or
                 self.position[2] > g_max_z):
-            reward -= 100
+            reward -= 150
             done = True
             if done and done_reason == '':
                 done_reason = 'out of map'
@@ -774,7 +774,7 @@ class UAVLandingEnv(gymnasium.Env):
         if self.position[2] < g_crash_shreshold:
             done = True
             done_reason = 'crash'
-            reward -= 100
+            reward -= 150
 
         # 如果降落任务完成或超时，就杀掉子线程，停止移动降落平台
         if done:
