@@ -52,7 +52,7 @@ g_start_point_z = 8
 # 目的地
 g_destination_x = 3
 g_destination_y = 3
-g_destination_z = 0.5
+g_destination_z = 0.7
 
 # 地理围栏
 g_max_x = 5

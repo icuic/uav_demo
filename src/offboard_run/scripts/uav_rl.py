@@ -27,7 +27,7 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0315-1500"
+test_time = "0315-1500(1m-79pct-3850-5500)"
 checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
     algorithm = 'ddpg'
     restore_from_checkpoint = True
-    restore_from = 2650
+    restore_from = 3850
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
