@@ -27,7 +27,7 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0315-1500(1m-79pct-3850-5500)"
+test_time = "0319-2315"
 checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
@@ -77,8 +77,8 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     algorithm = 'ddpg'
-    restore_from_checkpoint = True
-    restore_from = 3850
+    restore_from_checkpoint = False
+    restore_from = 950
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
@@ -103,13 +103,13 @@ if __name__ == "__main__":
             # sigma = 0.15
             total_iterated = d.get('total_iterated')
     else:
-        actor_lr = 3e-4
-        critic_lr = 3e-3
-        hidden_dim = 64
+        actor_lr = 1e-3
+        critic_lr = 1e-3
+        hidden_dim = 64*2
         gamma = 0.98
         tau = 0.005  # 软更新参数
-        buffer_size = 10000
-        minimal_size = 8000
+        buffer_size = 5000
+        minimal_size = 1000
         batch_size = 64
         sigma = 0.2  # 高斯噪声标准差
         total_iterated = 0
@@ -143,10 +143,10 @@ if __name__ == "__main__":
 
     early_stop = False
     continue_times = 0
-    reason_fifo_list = collections.deque(maxlen=100)
+    reason_fifo_list = collections.deque(maxlen=200)
 
     for i_episode in range(episode_from, 20001):
-        curriculum_learning(i_episode)  # 每轮调整难度
+        # curriculum_learning(i_episode)  # 每轮调整难度
 
         episode_return = 0
         distance = 0
@@ -219,9 +219,9 @@ if __name__ == "__main__":
 
         success_rate_list.append((i_episode, round(rate_success, 2), round(rate_timeout, 2), round(rate_crash, 2), round(rate_outmap, 2)))
 
-        if rate_success >= 0.95:
+        if rate_success >= 0.90:
             continue_times += 1
-            if continue_times > 200:
+            if continue_times > 100:
                 early_stop = True
         else:
             continue_times = 0

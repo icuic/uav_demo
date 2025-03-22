@@ -47,12 +47,12 @@ from gymnasium.utils import seeding
 # 起飞点
 g_start_point_x = 1
 g_start_point_y = 1
-g_start_point_z = 8
+g_start_point_z = 6
 
 # 目的地
 g_destination_x = 3
 g_destination_y = 3
-g_destination_z = 0.7
+g_destination_z = 1
 
 # 地理围栏
 g_max_x = 5
@@ -755,7 +755,7 @@ class UAVLandingEnv(gymnasium.Env):
         if (np.abs(self.position[0]) > g_max_x+1 or
                 np.abs(self.position[1]) > g_max_y+1 or
                 self.position[2] > g_max_z):
-            reward -= 150
+            reward -= 80
             done = True
             if done and done_reason == '':
                 done_reason = 'out of map'
@@ -768,13 +768,13 @@ class UAVLandingEnv(gymnasium.Env):
         if self.cnt > 200:
             done = True
             done_reason = 'timeout'
-            reward -= 100
+            reward -= 50
 
         # 过低
         if self.position[2] < g_crash_shreshold:
             done = True
             done_reason = 'crash'
-            reward -= 150
+            reward -= 100
 
         # 如果降落任务完成或超时，就杀掉子线程，停止移动降落平台
         if done:
@@ -991,7 +991,7 @@ class UAVLandingEnv(gymnasium.Env):
         return new_distance
 
     # 计算奖励
-    def cal_reward(self, v_action, v_distance, dt=0.05, alpha=0.8, beta=10.0, w_angle=0.7, w_speed=0.3):
+    def cal_reward(self, v_action, v_distance, dt=0.05, alpha=0.8, beta=5.0, w_angle=0.7, w_speed=0.3):
         """
         v_action: 三维速度向量 [vx, vy, vz]
         v_distance: 三维相对位置 [dx, dy, dz]
@@ -1024,7 +1024,7 @@ class UAVLandingEnv(gymnasium.Env):
         speed_reward = np.exp(-beta * (speed_diff ** 2))  # 高斯型速度奖励
 
         # 综合奖励
-        return w_angle * cos_sim + w_speed * speed_reward * cos_sim
+        return w_angle * cos_sim + w_speed * speed_reward * np.sign(cos_sim)
 
 
     def close(self):
