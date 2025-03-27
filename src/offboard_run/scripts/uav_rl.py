@@ -27,7 +27,7 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0319-2315"
+test_time = "0327-0940"
 checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
@@ -62,15 +62,55 @@ def load_reason_list(i, path):
     with open(f"{path}/{i}_reason_list.pkl", 'rb') as f:
         return pickle.load(f)
 
-def curriculum_learning(episode):
-    if episode < 1000:
-        env.motion_type = 'static'
-    elif episode < 5000:
-        env.motion_type = 'linear'
-        env.speed = 0.3
-    else:
-        env.motion_type = 'circular'
-        env.speed = 0.2
+def plot_realtime(ax1, ax2, ax3, ax4, returns, critic_losses, actor_losses, success_rates, window_size=100):
+    """实时更新四幅图表"""
+    try:
+        # 第一幅：回报曲线
+        ax1.cla()
+        ax1.plot(list(returns)[-window_size:], 'b-')
+        ax1.set_title(f"Recent {window_size} Episodes Return (Current: {returns[-1] if returns else 0:.2f})")
+        ax1.set_ylabel("Return")
+
+        # 第二幅：Critic Loss
+        ax2.cla()
+        ax2.plot(list(critic_losses), 'r-')
+        ax2.set_title(f"Critic Loss (Latest: {critic_losses[-1] if critic_losses else 0:.4f})")
+        ax2.set_ylabel("Loss")
+
+        # 第三幅：成功率指标
+        ax3.cla()
+        if success_rates:
+            episodes = [x[0] for x in success_rates]
+            ax3.plot(episodes, [x[1] for x in success_rates], 'g-', label='Success Rate')
+            ax3.plot(episodes, [x[2] for x in success_rates], 'y-', label='Timeout Rate')
+            ax3.plot(episodes, [x[3] for x in success_rates], 'r-', label='Crash Rate')
+            ax3.plot(episodes, [x[4] for x in success_rates], 'm-', label='OutMap Rate')
+            ax3.legend(loc='upper right')
+            ax3.set_title("Termination Reasons Rate")
+            ax3.set_xlabel("Episodes")
+            ax3.set_ylabel("Rate")
+            ax3.set_ylim(0, 1)  # 固定Y轴范围
+
+        # 第四幅：Actor Loss
+        ax4.cla()
+        ax4.plot(list(actor_losses), 'g-')
+        ax4.set_title(f"Actor Loss (Latest: {actor_losses[-1] if actor_losses else 0:.4f})")
+        ax4.set_ylabel("Loss")
+
+        plt.tight_layout()
+        plt.pause(0.001)
+    except Exception as e:
+        print(f"Plotting error: {str(e)}")
+
+# def curriculum_learning(episode):
+#     if episode < 3000:  # 延长静态目标训练
+#         env.motion_type = 'static'
+#     elif episode < 10000:  # 延长线性运动训练
+#         env.motion_type = 'linear'
+#         env.speed = 0.2  # 降低初始速度
+#     else:  # 渐进式增加难度
+#         env.motion_type = 'circular'
+#         env.speed = min(0.2 + (episode-10000)//1000*0.02, 0.4)  # 逐步加速
 
 if __name__ == "__main__":
 
@@ -78,7 +118,7 @@ if __name__ == "__main__":
 
     algorithm = 'ddpg'
     restore_from_checkpoint = False
-    restore_from = 950
+    restore_from = 0
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
@@ -103,15 +143,15 @@ if __name__ == "__main__":
             # sigma = 0.15
             total_iterated = d.get('total_iterated')
     else:
-        actor_lr = 1e-3
-        critic_lr = 1e-3
+        actor_lr = 1e-4
+        critic_lr = 1e-4
         hidden_dim = 64*2
         gamma = 0.98
         tau = 0.005  # 软更新参数
-        buffer_size = 5000
+        buffer_size = 20000
         minimal_size = 1000
-        batch_size = 64
-        sigma = 0.2  # 高斯噪声标准差
+        batch_size = 128
+        sigma = 0.3  # 高斯噪声标准差
         total_iterated = 0
 
     state_dim = env.observation_space.shape[0]
@@ -133,6 +173,7 @@ if __name__ == "__main__":
     reason_list = []
     success_rate_list = []
 
+
     if restore_from_checkpoint:
         replay_buffer.load(f"{checkpoints_path}/{restore_from}_buffer.pth")       
         agent.load(checkpoints_path, restore_from)        
@@ -143,10 +184,16 @@ if __name__ == "__main__":
 
     early_stop = False
     continue_times = 0
-    reason_fifo_list = collections.deque(maxlen=200)
+    reason_fifo_list = collections.deque(maxlen=100)
+    critic_loss_list = collections.deque(maxlen=1000)   # 保留最近1000个训练步的Critic损失
+    actor_loss_list = collections.deque(maxlen=1000)    # 保留最近1000个训练步的Actor损失
 
-    for i_episode in range(episode_from, 20001):
-        # curriculum_learning(i_episode)  # 每轮调整难度
+    # 创建绘图窗口
+    plt.ion()  # 启用交互模式
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(8, 6))  # 2x2布局
+
+    for i_episode in range(episode_from, 20000):
+        # curriculum_learning(i_episode)
 
         episode_return = 0
         distance = 0
@@ -154,21 +201,16 @@ if __name__ == "__main__":
         distance = info.get('distance')
         destination = info.get('dest')
         done = False
-        # print("20 seconds sleeping after reset...")
-        # time.sleep(2)
-        # print("waked")
-
-        # while True:
-        #     env.step(np.array([0, 0], dtype=float))
-        #     time.sleep(1)
-        #     pass
 
         print(f"{'='*20} episode: {i_episode} {'='*20}")
         i_step = 0
         while not done:                    
             # time.sleep(0.05)
-            action = agent.take_action(state)
+            action = agent.take_action(state, i_episode)
             action = np.round(action, 2)
+
+            # print(f"state: {state} action: {action}")
+
             # action = np.array([0, 0], dtype=float)
 
             # print("action type: ", type(action))
@@ -181,7 +223,7 @@ if __name__ == "__main__":
             # print(f'action is {action[0], action[1], action[2]}')
 
             next_state, reward, done, _ = env.step(action)     
-            # print(f"exp: state: {state}, action: {action}, reward: {reward}, next_state: {next_state}, done: {done}")
+            # print(f"--000--- exp: state: {state}, action: {action}, reward: {reward}, next_state: {next_state}, done: {done}")
             replay_buffer.add(state, action, reward, next_state, done)
             
             state = next_state
@@ -197,12 +239,13 @@ if __name__ == "__main__":
                     'rewards': b_r,
                     'dones': b_d
                 }
-                agent.update(transition_dict)
+                actor_loss, critic_loss =  agent.update(transition_dict)
+
+                critic_loss_list.append(critic_loss)  # 自动限制长度
+                actor_loss_list.append(actor_loss)    # 自动限制长度
+
                 total_iterated  += 1
 
-        if algorithm != 'ddpg':
-            epsilon *= 0.98
-            agent.set_epsilon(epsilon)
 
         return_list.append(episode_return)
         reason_list.append(_['done_reason'])        
@@ -214,10 +257,14 @@ if __name__ == "__main__":
         rate_timeout = reason_fifo_list.count('timeout') / len_reason_fifo_list
         rate_crash = reason_fifo_list.count('crash') / len_reason_fifo_list
         rate_outmap = reason_fifo_list.count('out of map') / len_reason_fifo_list
-        print(f"success: {rate_success:.2f}, timeout: {rate_timeout:.2f}, crash: {rate_crash:.2f}, outmap: {rate_outmap:.2f}, len_fifo: {len_reason_fifo_list}, learning: {replay_buffer.size() > minimal_size}")      
+        print(f"success: {rate_success:.2f}, timeout: {rate_timeout:.2f}, crash: {rate_crash:.2f}, outmap: {rate_outmap:.2f}, learning: {replay_buffer.size() > minimal_size}")      
         print(f'episode: {i_episode}, return: {episode_return:.2f}')
 
         success_rate_list.append((i_episode, round(rate_success, 2), round(rate_timeout, 2), round(rate_crash, 2), round(rate_outmap, 2)))
+
+        # 动态更新图表（每个episode更新一次）
+        if replay_buffer.size() > minimal_size:
+            plot_realtime(ax1, ax2, ax3, ax4, return_list, critic_loss_list, actor_loss_list, success_rate_list, window_size=100)
 
         if rate_success >= 0.90:
             continue_times += 1
@@ -246,4 +293,3 @@ if __name__ == "__main__":
             break
 
     env.close()
- 

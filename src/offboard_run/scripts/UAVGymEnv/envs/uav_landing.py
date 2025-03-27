@@ -60,7 +60,7 @@ g_max_y = 5
 g_max_z = 10
 
 # 定义成功降落
-g_landing_tolerance = 1
+g_landing_tolerance = 3
 g_crash_shreshold = 0.5
 
 # train or eval
@@ -82,54 +82,6 @@ def normalize_state(actual_diff):
         actual_diff[2] / g_max_z
     ], dtype=np.float32)
 
-def denormalize_state(normalized_diff):
-    """将归一化值转换回实际坐标差值
-    Args:
-        normalized_diff: numpy数组，形状(3,) 表示归一化后的差值
-    Returns:
-        实际坐标差值numpy数组，形状(3,)
-    """
-    return np.array([
-        normalized_diff[0] * 2 * g_max_x,
-        normalized_diff[1] * 2 * g_max_y,
-        normalized_diff[2] * g_max_z
-    ], dtype=np.float32)
-
-def normalize_xy(value):
-    """将单个X/Y实际值转换为归一化值
-    Args:
-        value: 标量或numpy数组，X/Y方向的实际差值
-    Returns:
-        归一化后的值（范围[-1,1]）
-    """
-    return np.array(value / (2 * g_max_x), dtype=np.float32)
-
-def denormalize_xy(norm_value):
-    """将归一化的X/Y值转换回实际值
-    Args:
-        norm_value: 标量或numpy数组
-    Returns:
-        实际差值
-    """
-    return np.array(norm_value * 2 * g_max_x, dtype=np.float32)
-
-def normalize_z(value):
-    """将Z实际值转换为归一化值
-    Args:
-        value: 标量或numpy数组，Z方向的实际差值
-    Returns:
-        归一化后的值（范围[-1,1]）
-    """
-    return np.array(value / g_max_z, dtype=np.float32)
-
-def denormalize_z(norm_value):
-    """将归一化的Z值转换回实际值
-    Args:
-        norm_value: 标量或numpy数组
-    Returns:
-        实际差值
-    """
-    return np.array(norm_value * g_max_z, dtype=np.float32)
 
 class simulationHandler():
 
@@ -137,33 +89,27 @@ class simulationHandler():
         self.ready = False
         self.sub_topics_ready = {key: False for key in ['local_pos', 'state', 'ext_state']}
 
-        # 发布的话题 topic published
-        self.pos = PoseStamped()        
-        self.vel = TwistStamped()
+        # 发布的话题 topic published, 用于控制无人机
         self.raw = PositionTarget()
 
         # 订阅的话题 topic subscribed
-        self.state = State()
-        self.extended_state = ExtendedState()
-        self.local_position = PoseStamped()
+        self.state = State()                    # 无人机状态: 连接、上锁、解锁等
+        self.extended_state = ExtendedState()   # 无人机详细状态(暂未使用)
+        self.local_position = PoseStamped()     # 无人机位置
 
         # 本节点订阅的话题
         self.state_sub = rospy.Subscriber('mavros/state', State, self.state_callback)
         self.ext_state_sub = rospy.Subscriber('mavros/extended_state', ExtendedState, self.extended_state_callback)
         self.local_pos_sub = rospy.Subscriber('mavros/local_position/pose', PoseStamped, self.local_position_callback)
 
-        # 本节点发布的话题
-        self.pos_setpoint_pub = rospy.Publisher('mavros/setpoint_position/local', PoseStamped, queue_size=10)
-        self.vel_setpoint_pub = rospy.Publisher('mavros/setpoint_velocity/cmd_vel', TwistStamped, queue_size=10)
+        # 本节点发布的话题, 用于控制无人机
         self.raw_setpoint_pub = rospy.Publisher('mavros/setpoint_raw/local', PositionTarget, queue_size=10)
 
-        # 创建服务客户端
+        # 创建服务客户端, 用于设置模式和解锁/上锁
         self.set_mode_srv = rospy.ServiceProxy('mavros/set_mode', SetMode)
         self.set_arming_srv = rospy.ServiceProxy('mavros/cmd/arming', CommandBool)
 
-        # 创建新线程，专门用于发布话题
-        # self.pos_thread = Thread(target=self.send_pos, args=(), name="pos_thread")
-        # self.pos_thread = Thread(target=self.send_vel, args=(), name="vel_thread")
+        # 创建新线程，专门用于发布话题, 用于控制无人机
         self.pos_thread = Thread(target=self.send_raw, args=(), name="raw_thread")
         self.pos_thread.daemon = True
         self.pos_thread.start()
@@ -176,30 +122,17 @@ class simulationHandler():
         # self.pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
         # self.reset_proxy = rospy.ServiceProxy('/gazebo/reset_world', Empty)
 
-    def setup(self):
-        service_timeout = 60
 
+    def getReady(self):
+        service_timeout = 60
         try:
             rospy.wait_for_service('mavros/cmd/arming', service_timeout)
             rospy.wait_for_service('mavros/set_mode', service_timeout)
         except rospy.ROSException:
             rospy.loginfo("simulationHandler failed to connect to services")
 
-        rospy.loginfo("simulation handler setup.")
+        self.wait_for_topics(service_timeout)
 
-
-    def getReady(self):
-        try:
-            rospy.wait_for_service('mavros/cmd/arming', 60)
-            rospy.wait_for_service('mavros/set_mode', 60)
-        except rospy.ROSException:
-            rospy.loginfo("simulationHandler failed to connect to services")
-
-        self.wait_for_topics(60)
-        # self.wait_for_landed_state(mavutil.mavlink.MAV_LANDED_STATE_ON_GROUND,
-        #                            10, -1)
-
-        self.state
         if self.state.mode != "OFFBOARD":
             self.set_mode("OFFBOARD", 5)
 
@@ -210,18 +143,12 @@ class simulationHandler():
         print(f"reached start point: {g_start_point_x}, {g_start_point_y}, {g_start_point_z}")
 
         self.ready = True
-        # time.sleep(5)
 
     def wait_for_topics(self, timeout):
-        """wait for simulation to be ready, make sure we're getting topic info
-        from all topics by checking dictionary of flag values set in callbacks,
-        timeout(int): seconds"""
         loop_freq = 1  # Hz
         rate = rospy.Rate(loop_freq)
         for i in range(timeout * loop_freq):
             if all(value for value in self.sub_topics_ready.values()):
-                # rospy.loginfo("simulation topics ready | seconds: {0} of {1}".
-                #               format(i / loop_freq, timeout))
                 break
 
             try:
@@ -234,8 +161,6 @@ class simulationHandler():
         rate = rospy.Rate(loop_freq)
         for i in range(timeout * loop_freq):
             if self.extended_state.landed_state == desired_landed_state:
-                # rospy.loginfo("landed state confirmed | seconds: {0} of {1}".
-                #               format(i / loop_freq, timeout))
                 break
 
             try:
@@ -246,9 +171,7 @@ class simulationHandler():
     def operate(self, command):
         try:
             data = command.split('#')
-            # print("333", *data)
 
-            # print('@ctrl_server@ get cmd ' + str(data))
             # get cmd content
             cmd = data[0]
             margin = 0.5
@@ -257,7 +180,6 @@ class simulationHandler():
 
             r_msg = ''
 
-            # print('@ctrl_server@ executing cmd: ' + cmd)
             if cmd == 'reset':
                 self.reach_position(g_des_x, g_des_y, g_des_z, 5)
                 self.land()
@@ -268,43 +190,17 @@ class simulationHandler():
                 self.getReady()
                 r_msg = self.getState()
 
-            elif cmd == 'shutdown':
-                # self.shutDown()
-                # over = True
-                # r_msg = 'recv shutdown'
-                pass
 
             elif cmd == 'setVelocity':
-                # self.setVelocity(data[1], data[2])
                 # data[0]: 'setVelocity'
                 # data[1]: vx
                 # data[2]: vy
                 # data[3]: vz
 
-                # print("444", data[4])
                 # mask = 0    # 4088: px,py,pz only, 4067: pz,vx,vy only, 4039: vx,vy,vz only
-                # if data[3] == "True":
-                #     mask = 4067
-                #     data[4] = 5
-                # else:
-                #     mask = 4039
-
-                # print(type(data[3]))
-                # print(data[3])
-                # print("555", data[4])
-
-                # print(f"mask: {mask}, pos: {data[3]}, data[4]: {data[4]}")
                 self.setRaw(4039, g_start_point_x, g_start_point_y, g_start_point_z, data[1], data[2], data[3])
                 r_msg = self.getState()
 
-            elif cmd == 'move':
-                self.move(data[1], data[2], data[3])
-                r_msg = self.getState()
-            else:
-                self.moveOnce(cmd, margin)
-                r_msg = self.getState()
-            # print('@ctrl_server@ executing' + cmd + 'over, return msg ' + str(r_msg))
-            # print(f'r_msg: ', r_msg)
             return r_msg
 
         except BaseException as e:
@@ -327,39 +223,9 @@ class simulationHandler():
         self.set_arm(False, 5)
 
     def getState(self):
-        data = np.array([self.local_position.pose.position.x,
+        return np.array([self.local_position.pose.position.x,
                          self.local_position.pose.position.y,
                          self.local_position.pose.position.z])
-        # data = np.append(data, self.scan.ranges)
-        # a string state date
-        return data
-
-    def send_pos(self):
-        rate = rospy.Rate(30)  # Hz
-        self.pos.header = Header()
-        self.pos.header.frame_id = "base_footprint"
-        self.set_pos()
-
-        while not rospy.is_shutdown():
-            self.pos.header.stamp = rospy.Time.now()
-            self.pos_setpoint_pub.publish(self.pos)
-            try:  # prevent garbage in console output when thread is killed
-                rate.sleep()
-            except rospy.ROSInterruptException:
-                pass
-
-    def send_vel(self):
-        rate = rospy.Rate(30)
-        self.vel.header = Header()
-        self.vel.header.frame_id = "manual_vel"
-
-        while not rospy.is_shutdown():
-            self.vel.header.stamp = rospy.Time.now()
-            self.vel_setpoint_pub.publish(self.vel)
-            try:  # prevent garbage in console output when thread is killed
-                rate.sleep()
-            except rospy.ROSInterruptException:
-                pass
 
     def send_raw(self):
         rate = rospy.Rate(30)
@@ -374,102 +240,13 @@ class simulationHandler():
             except rospy.ROSInterruptException:
                 pass            
 
-    def moveOnce(self, cmd, margin):
-        self.local_position.pose.position.z = g_start_point_z
-        if cmd == 'moveUp':
-            self.moveUp(margin)
-        elif cmd == 'moveDown':
-            self.moveDown(margin)
-        elif cmd == 'moveXPlus':
-            self.moveXPlus(margin)
-        elif cmd == 'moveXMin':
-            self.moveXMin(margin)
-        elif cmd == 'moveYPlus':
-            self.moveYPlus(margin)
-        elif cmd == 'moveYMin':
-            self.moveYMin(margin)
-        elif cmd == 'stay':
-            pass
-
-    def moveUp(self, margin=1):
-        if not self.ready:
-            self.getReady()
-        self.reach_position(self.local_position.pose.position.x,
-                            self.local_position.pose.position.y,
-                            self.local_position.pose.position.z + margin,
-                            5)
-
-    def moveDown(self, margin=1):
-        if not self.ready:
-            self.getReady()
-        self.reach_position(self.local_position.pose.position.x,
-                            self.local_position.pose.position.y,
-                            self.local_position.pose.position.z - margin,
-                            5)
-
-    def moveXPlus(self, margin=1):
-        if not self.ready:
-            self.getReady()
-        self.reach_position(self.local_position.pose.position.x + margin,
-                            self.local_position.pose.position.y,
-                            self.local_position.pose.position.z,
-                            5)
-
-    def moveXMin(self, margin=1):
-        if not self.ready:
-            self.getReady()
-        self.reach_position(self.local_position.pose.position.x - margin,
-                            self.local_position.pose.position.y,
-                            self.local_position.pose.position.z,
-                            5)
-
-    def moveYPlus(self, margin=1):
-        if not self.ready:
-            self.getReady()
-        self.reach_position(self.local_position.pose.position.x,
-                            self.local_position.pose.position.y + margin,
-                            self.local_position.pose.position.z,
-                            5)
-
-    def moveYMin(self, margin=1):
-        if not self.ready:
-            self.getReady()
-        self.reach_position(self.local_position.pose.position.x,
-                            self.local_position.pose.position.y - margin,
-                            self.local_position.pose.position.z,
-                            5)
-
-    def move(self, x, y, z, timeout=5):
-        t_x = self.pos.pose.position.x + float(x)
-        t_y = self.pos.pose.position.y + float(y)
-        t_z = self.pos.pose.position.z + float(z)
-        self.reach_position(t_x, t_y, t_z, timeout)
 
     def reach_position(self, x, y, z, timeout):
-        """timeout(int): seconds"""
-        # set a position setpoint
-        self.pos.pose.position.x = x
-        self.pos.pose.position.y = y
-        self.pos.pose.position.z = z
-
-        # set a position setpoint
-        # self.vel.twist.linear.x = 0
-        # self.vel.twist.linear.y = 0
-        # self.vel.twist.linear.z = 1
-
-        # For demo purposes we will lock yaw/heading to north.
-        # yaw_degrees = 0  # North
-        # yaw = math.radians(yaw_degrees)
-        # quaternion = quaternion_from_euler(0, 0, yaw)
-        # self.pos.pose.orientation = Quaternion(*quaternion)
-
         # dose it reach the position in 'time' seconds?
         loop_freq = 100  # Hz
         rate = rospy.Rate(loop_freq)
         for i in range(timeout * loop_freq):
-            if self.is_at_position(self.pos.pose.position.x,
-                                   self.pos.pose.position.y,
-                                   self.pos.pose.position.z, self.radius):
+            if self.is_at_position(x, y, z, self.radius):
                 break
             try:
                 rate.sleep()
@@ -477,7 +254,6 @@ class simulationHandler():
                 pass
 
     def is_at_position(self, x, y, z, offset):
-        """offset:meters"""
         desired = np.array((x, y, z))
         pos = np.array((self.local_position.pose.position.x,
                         self.local_position.pose.position.y,
@@ -486,7 +262,6 @@ class simulationHandler():
 
     # call service
     def set_mode(self, mode, timeout):
-
         """mode: PX4 mode string, timeout(int): seconds"""
         loop_freq = 1  # Hz
         rate = rospy.Rate(loop_freq)
@@ -543,28 +318,6 @@ class simulationHandler():
         if not self.sub_topics_ready['ext_state']:
             self.sub_topics_ready['ext_state'] = True
 
-    def set_pos(self):
-        self.pos.pose.position.x = g_start_point_x
-        self.pos.pose.position.y = g_start_point_y
-        self.pos.pose.position.z = g_start_point_z
-
-    def resetVelocity(self, vx, vy):
-        self.vel.twist.linear.x = float(0)
-        self.vel.twist.linear.y = float(0)
-        self.vel.twist.linear.z = float(0.2)
-
-    def setVelocity(self, vx, vy):
-        self.vel.twist.linear.x = float(vx)
-        self.vel.twist.linear.y = float(vy)
-    
-        vz = 0
-        if self.local_position.pose.position.z < 4:
-            vz = 0.3
-        elif self.local_position.pose.position.z > 5:
-            vz = -0.2
-    
-        self.vel.twist.linear.z = vz
-
     def setRaw(self, mask, px, py, pz, vx, vy, vz):
         self.raw.coordinate_frame = 1
         self.raw.type_mask = mask   # 0: px/py/pz take effect; 3: pz/vx/vy take effect, 4039: vx/vy/vz take effect
@@ -576,7 +329,6 @@ class simulationHandler():
         self.raw.velocity.x = float(vx)
         self.raw.velocity.y = float(vy)
         self.raw.velocity.z = float(vz)
-
 
 
 class UAVLandingEnv(gymnasium.Env):
@@ -612,29 +364,28 @@ class UAVLandingEnv(gymnasium.Env):
         self.landing_area_msg = ModelState()    
         self.stop_event = ThreadingEvent()
 
+        # 初始化无人机仿真环境控制接口类
         self.simHandler = simulationHandler()
 
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float32)
-        # self.action_space = spaces.Discrete(4)  # U, D, F, B, L, R
-        self.action_space = spaces.Box(low=np.array([-1, -1, -1]), high=np.array([1, 1, 1]), dtype=np.float32)
+        self.observation_space = spaces.Box(low = -np.inf, high = np.inf, shape=(3,), dtype = np.float32)
+        self.action_space = spaces.Box(low= np.array([-1, -1, -1]), high = np.array([1, 1, 1]), dtype = np.float32)
         self.reward_range = (-np.inf, np.inf)
 
         self._seed()
 
-        self.radius = 0.1
-        # 无人机当前位置
-        if not g_uav_true_value:
-            self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
-        else:
-            self.position = [g_start_point_x, g_start_point_y, g_start_point_z]
-
         # 降落平台当前位置
-        self.des = [g_destination_x, g_destination_y, g_destination_z]
+        self.des = np.array([g_destination_x, g_destination_y, g_destination_z])
+
+        # 无人机当前位置
+        self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
+
+        # 计数器
         self.cnt = 0
 
         if g_uav_true_value:
             rospy.Subscriber('/gazebo/model_states', ModelStates, self.model_states_callback)
 
+        # 评估模式
         if g_eval:
             self.recorder = DroneAndPlatformTrajectoryRecorder()
 
@@ -652,8 +403,7 @@ class UAVLandingEnv(gymnasium.Env):
             position = msg.pose[model_index].position
             
             # 将位置信息添加到列表中
-            self.des.clear()
-            self.des.extend((position.x, position.y, g_destination_z))  # 假装降落平台的高度是2米
+            self.des = np.array([position.x, position.y, g_destination_z])  # 假装降落平台的高度是固定的
             
             if g_uav_true_value:
                 # 查找 iris 模型的索引
@@ -662,17 +412,11 @@ class UAVLandingEnv(gymnasium.Env):
                 # 提取 iris 的位置信息
                 position = msg.pose[iris_index].position
                 
-                # 将位置信息添加到列表中
-                self.position.clear()
-                self.position.extend((position.x, position.y, position.z)) 
-
-
-            # 打印位置信息
-            # rospy.loginfo(f"Position of landing_area: x={landing_area_position.x}, y={landing_area_position.y}, z={landing_area_position.z}")
+                # 更新无人机的位置信息
+                self.position = np.array([position.x, position.y, position.z]) 
 
         except ValueError:
-            # 如果找不到 landing_area 模型
-            rospy.logwarn("Model 'landing_area' not found in the list of models.")        
+            rospy.logwarn("Model not found in the list of models.")        
 
 
     def step(self, action):   
@@ -682,24 +426,23 @@ class UAVLandingEnv(gymnasium.Env):
         # print(f"time exhaust: {elapsed_time:.3f}")
 
         # 记录执行动作之前的状态
-        # old_position = np.array([self.position[0], self.position[1], self.position[2]])
+        # old_position = self.position
 
         cmd = ''
-        margin = 0.3
         done_reason = ''
 
         reward = 0
         done = False
 
-
         # 计算奖励
-        _state = np.subtract(normalize_state(self.des), normalize_state(self.position))
         _state_to_print = np.subtract(self.des, self.position)
+        _pre_state = normalize_state(_state_to_print)[:3]
 
-        reward = self.cal_reward(action[:3], _state[:3])
+        # print(f"_pre_state: {_pre_state}")
 
-        # 打印
+        reward = self.cal_reward(action[:3], normalize_state(_state_to_print)[:3])
 
+        # 打印状态信息
         print("a_t: ", ', '.join(f"{a:.2f}" for a in action))       # a_t
         print("s_t: ", ', '.join(f"{pos:.2f}" for pos in _state_to_print))      # s_t
 
@@ -707,7 +450,7 @@ class UAVLandingEnv(gymnasium.Env):
         print("tgt: ", ", ".join(f"{num:.2f}" for num in self.des))         # 目标位置
 
         height = abs(self.des[2] - self.position[2])
-        distance = self.cal_distence(self.position, self.des)
+        distance = np.linalg.norm(self.position - self.des)
         print(f"hight_t: {height:.2f}, dist_t: {distance:.2f}")
 
 
@@ -724,14 +467,15 @@ class UAVLandingEnv(gymnasium.Env):
         if type(action) == np.ndarray  and action.size == 3:
             cmd = f'setVelocity#{action[0]}#{action[1]}#{action[2]}'
 
-        data = self.simHandler.operate(cmd)
+        self.simHandler.operate(cmd)
         time.sleep(0.05)
-        data = self.simHandler.getState()
 
         if not g_uav_true_value:
-            self.position = [round(data[i], 2) for i in range(3)]
+            # 无人机当前位置由mavros提供
+            self.position = self.simHandler.getState()
         else:
-            self.position = [round(self.position[i], 2) for i in range(3)]
+            # 无人机当前位置由gazebo提供
+            pass
 
 
         # 计算高度和距离
@@ -740,25 +484,24 @@ class UAVLandingEnv(gymnasium.Env):
         print("tgt_t+1: ", ", ".join(f"{num:.2f}" for num in self.des))         # 目标新的位置
         
         height = abs(self.des[2] - self.position[2])
-        distance = self.cal_distence(self.position, self.des)
+        distance = np.linalg.norm(self.position - self.des)
         print(f"hight_t+1: {height:.2f}, dist_t+1: {distance:.2f}")
         print("---")
 
         # 判断是否降落成功
-        if distance < g_landing_tolerance and height < g_landing_tolerance:
+        if distance < g_landing_tolerance:
             done = True
             done_reason = 'finish'
-            reward += 100
+            reward += 200
    
 
         # 超出范围
         if (np.abs(self.position[0]) > g_max_x+1 or
                 np.abs(self.position[1]) > g_max_y+1 or
                 self.position[2] > g_max_z):
-            reward -= 80
             done = True
-            if done and done_reason == '':
-                done_reason = 'out of map'
+            done_reason = 'out of map'
+            reward -= 150
 
         # 时间效率惩罚
         # reward -= 0.2  # 每步微小惩罚鼓励快速决策
@@ -768,13 +511,13 @@ class UAVLandingEnv(gymnasium.Env):
         if self.cnt > 200:
             done = True
             done_reason = 'timeout'
-            reward -= 50
+            reward -= 100
 
         # 过低
         if self.position[2] < g_crash_shreshold:
             done = True
             done_reason = 'crash'
-            reward -= 100
+            reward -= 150
 
         # 如果降落任务完成或超时，就杀掉子线程，停止移动降落平台
         if done:
@@ -829,6 +572,8 @@ class UAVLandingEnv(gymnasium.Env):
             (self.des[2] - self.position[2]) / (g_max_z)        # Z轴归一化到[-1,1]（因为g_max_z=10）
         ], dtype=np.float32)
 
+        # print(f"---111--- state: {_pre_state}, action: {action}, reward: {reward}, next_state: {state}, done: {done}")
+
         return state, reward, done, {'done_reason': done_reason}
 
     def reset(self, seed=None, options=None):
@@ -841,16 +586,12 @@ class UAVLandingEnv(gymnasium.Env):
         g_start_point_y = round(random.uniform(-1*g_max_y, g_max_y), 1)
         g_start_point_z = g_start_point_z
         
-        self.position = [g_start_point_x, g_start_point_y, g_start_point_z]
-       
+        self.position = np.array([g_start_point_x, g_start_point_y, g_start_point_z])
 
         print("start point: ", ' '.join(f"{pos:.2f}" for pos in self.position))
         # print("destination: ", ' '.join(f"{pos:.2f}" for pos in self.des))
 
         self.simHandler.setRaw(0, g_start_point_x, g_start_point_y, g_start_point_z, 0, 0, 0)
-
-        # 移动降落平台至目的地
-        # 改变模型pose
     
         # 创建新线程，专门用于发布话题
         # 初始化运动参数
@@ -858,8 +599,8 @@ class UAVLandingEnv(gymnasium.Env):
             x, y = 0.0, 0.0
             if self.motion_type == 'static':
                 # 随机生成[-5,5]范围内的初始位置
-                x = round(random.uniform(-5, 5), 2)
-                y = round(random.uniform(-5, 5), 2)
+                x = round(random.uniform(-1*g_max_x, g_max_x), 2)
+                y = round(random.uniform(-1*g_max_y, g_max_y), 2)
             elif self.motion_type == 'linear':
                 # 初始化在起点(4,4)
                 x, y = 4.0, 4.0
@@ -870,19 +611,13 @@ class UAVLandingEnv(gymnasium.Env):
                 self.landing_area_radius = 4  # 半径设为4米
 
             g_destination_x , g_destination_y = x, y
-            self.des = [g_destination_x, g_destination_y, g_destination_z]
+            self.des = np.array([g_destination_x, g_destination_y, g_destination_z])
 
             self.landing_area_thread = Thread(target=self.move_landing_area, args=(x, y), name="move_landing_area_thread")
             self.landing_area_thread.daemon = True
             self.landing_area_thread.start()     
-            self.direction = -1  # 运动方向，1 表示从 (0, 0) 到 (3, 3)，-1 表示从 (3, 3) 到 (0, 0)
-            self.stop_event.clear()
 
-        # rospy.wait_for_service('/gazebo/reset_world')
-        # try:
-        #     self.reset_proxy()
-        # except rospy.ServiceException as e:
-        #     print ("@env@ /gazebo/reset_world service call failed")
+            self.stop_event.clear()
 
 
         # 恢复仿真     
@@ -969,29 +704,10 @@ class UAVLandingEnv(gymnasium.Env):
                 self.landing_area_msg.pose.position.z = 0.0
                 self.landing_area_pub.publish(self.landing_area_msg)
                 rate.sleep()
-
-
-    def cmp_distence(self, old_position, new_position, destination):
-        old_distance = np.sqrt(
-            np.square(destination[0] - old_position[0]) + np.square(destination[1] - old_position[1]) + np.square(
-                destination[2] - old_position[2]))
-
-        new_distance = np.sqrt(
-            np.square(destination[0] - new_position[0]) + np.square(destination[1] - new_position[1]) + np.square(
-                destination[2] - new_position[2]))
-
-        return old_distance - new_distance
-
-    # 计算当前位置与目标位置的距离
-    def cal_distence(self, new_position, destination):
-        new_distance = np.sqrt(
-            # np.square(destination[0] - new_position[0]) + np.square(destination[1] - new_position[1]) + np.square(destination[2] - new_position[2]))
-            np.square(destination[0] - new_position[0]) + np.square(destination[1] - new_position[1]))
-
-        return new_distance
+    
 
     # 计算奖励
-    def cal_reward(self, v_action, v_distance, dt=0.05, alpha=0.8, beta=5.0, w_angle=0.7, w_speed=0.3):
+    def cal_reward(self, v_action, v_distance, dt=0.05, alpha=0.8, beta=5.0, w_angle=0.3, w_speed=0.2, w_dist=0.5):
         """
         v_action: 三维速度向量 [vx, vy, vz]
         v_distance: 三维相对位置 [dx, dy, dz]
@@ -999,8 +715,9 @@ class UAVLandingEnv(gymnasium.Env):
         dt : float - 时间步长(默认0.05s)
         alpha : float - 动态速度比例系数(默认0.5)
         beta : float - 速度奖励衰减系数(默认10.0)
-        w_angle : float - 方向奖励权重(默认0.7)
-        w_speed : float - 速度奖励权重(默认0.3)        
+        w_angle : float - 方向奖励权重(默认0.3)
+        w_speed : float - 速度奖励权重(默认0.2)     
+        w_dist : float - 距离奖励权重(默认0.5)   
         """
 
         # 计算物理约束范围
@@ -1023,8 +740,13 @@ class UAVLandingEnv(gymnasium.Env):
         speed_diff = norm_act - v_ideal
         speed_reward = np.exp(-beta * (speed_diff ** 2))  # 高斯型速度奖励
 
+        # 距离奖励
+        distance_reward = -1 * norm_dis
+
         # 综合奖励
-        return w_angle * cos_sim + w_speed * speed_reward * np.sign(cos_sim)
+        r = w_angle * cos_sim + w_speed * speed_reward * np.sign(cos_sim) + w_dist * distance_reward
+        print(f"reward in fun: {r:.2f}")
+        return r
 
 
     def close(self):
@@ -1065,22 +787,3 @@ class UAVLandingEnv(gymnasium.Env):
     def _seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
-
-    def calculate_velocity(self, state):
-        x_distance = state[0]
-        y_distance = state[1]
-        height = state[2]
-        ret = 0
-        # 计算 xy 平面的距离
-        dist = math.sqrt(x_distance ** 2 + y_distance ** 2)
-
-
-        if 0 < dist < 1:
-            if 0 <= abs(height) <= 0.1:
-                ret = 0
-            elif 0.1 < abs(height) <= 3.5:
-                ret = 0.5 * height
-            elif abs(height) > 3.5:
-                ret = 0.5 * height
-
-        return ret, height, dist
