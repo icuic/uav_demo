@@ -117,8 +117,8 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     algorithm = 'ddpg'
-    restore_from_checkpoint = False
-    restore_from = 0
+    restore_from_checkpoint = True
+    restore_from = 2870
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
