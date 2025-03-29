@@ -60,7 +60,7 @@ g_max_y = 5
 g_max_z = 10
 
 # 定义成功降落
-g_landing_tolerance = 2
+g_landing_tolerance = 1
 g_crash_shreshold = 0.5
 
 # train or eval
