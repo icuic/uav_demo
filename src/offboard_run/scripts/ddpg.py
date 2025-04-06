@@ -74,7 +74,7 @@ class DDPG:
         # 给动作添加噪声，增加探索
         # action = action + self.sigma * np.random.randn(self.action_dim)
 
-        noise_scale = self.sigma * (1 - i_episode/30000)  # 线性衰减
+        noise_scale = self.sigma * (1 - i_episode/50000)  # 线性衰减
         action = action + noise_scale * np.random.randn(self.action_dim)     
 
         # 需要添加截断操作保证动作在合法范围内

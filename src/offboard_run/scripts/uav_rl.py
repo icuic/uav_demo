@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
     algorithm = 'ddpg'
     restore_from_checkpoint = True
-    restore_from = 10669
+    restore_from = 30146
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
@@ -192,7 +192,7 @@ if __name__ == "__main__":
     plt.ion()  # 启用交互模式
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(8, 6))  # 2x2布局
 
-    for i_episode in range(episode_from, 30000):
+    for i_episode in range(episode_from, 50000):
         # curriculum_learning(i_episode)
 
         episode_return = 0
