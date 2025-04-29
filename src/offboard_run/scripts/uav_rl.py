@@ -27,7 +27,7 @@ import time
 import json
 import rl_utils as rl_utils
 
-test_time = "0327-0940"
+test_time = "0409-0830"
 checkpoints_path = './checkpoints/'+test_time
 
 def create_checkpoints_folder():
@@ -117,8 +117,8 @@ if __name__ == "__main__":
     create_checkpoints_folder()
 
     algorithm = 'ddpg'
-    restore_from_checkpoint = True
-    restore_from = 30146
+    restore_from_checkpoint = False
+    restore_from = 0
     episode_from = 0
 
     env_name = 'UAVGymEnv/UAVLandingEnv-v0'
@@ -192,12 +192,17 @@ if __name__ == "__main__":
     plt.ion()  # 启用交互模式
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(8, 6))  # 2x2布局
 
+    id_tolerance = 0
+    # [1473, 1855, 4319, 4757, 14989, 16663, 38031]
+    list_toleralce = [4, 3, 2, 1.5, 1, 0.8, 0.6, 0.4, 0.2, 0.1]
+    list_episodes = []
+
     for i_episode in range(episode_from, 50000):
         # curriculum_learning(i_episode)
 
         episode_return = 0
         distance = 0
-        state, info = env.reset()
+        state, info = env.reset(tolerance=list_toleralce[id_tolerance])
         distance = info.get('distance')
         destination = info.get('dest')
         done = False
@@ -258,7 +263,7 @@ if __name__ == "__main__":
         rate_crash = reason_fifo_list.count('crash') / len_reason_fifo_list
         rate_outmap = reason_fifo_list.count('out of map') / len_reason_fifo_list
         print(f"success: {rate_success:.2f}, timeout: {rate_timeout:.2f}, crash: {rate_crash:.2f}, outmap: {rate_outmap:.2f}, learning: {replay_buffer.size() > minimal_size}")      
-        print(f'episode: {i_episode}, return: {episode_return:.2f}')
+        print(f'episode: {i_episode}, return: {episode_return:.2f}, tolerance: {list_toleralce[id_tolerance]}, ctimes: {continue_times}, l_epi: {list_episodes}')
 
         success_rate_list.append((i_episode, round(rate_success, 2), round(rate_timeout, 2), round(rate_crash, 2), round(rate_outmap, 2)))
 
@@ -269,11 +274,15 @@ if __name__ == "__main__":
         if rate_success >= 0.90:
             continue_times += 1
             if continue_times > 100:
-                early_stop = True
+                continue_times = 0
+                id_tolerance += 1
+                list_episodes.append(i_episode)
+                if id_tolerance >= len(list_toleralce):
+                    early_stop = True
         else:
             continue_times = 0
 
-        if i_episode % 50 == 0 or early_stop:
+        if i_episode % 100 == 0 or early_stop:
             agent.save(checkpoints_path, i_episode)
             replay_buffer.save(f"{checkpoints_path}/{i_episode}_buffer.pth")
             save_return_list(i_episode, checkpoints_path, return_list)

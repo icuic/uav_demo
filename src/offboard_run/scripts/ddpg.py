@@ -11,22 +11,23 @@ import rl_utils as rl_utils
 class PolicyNet(torch.nn.Module):
     def __init__(self, state_dim, hidden_dim, action_dim, action_bound):
         super(PolicyNet, self).__init__()
-        # self.fc1 = torch.nn.Linear(state_dim, hidden_dim)
-        # self.fc2 = torch.nn.Linear(hidden_dim, action_dim)
-        # self.action_bound = action_bound  # action_bound是环境可以接受的动作最大值
-
-        self.fc1 = nn.Linear(state_dim, 256)
-        self.fc2 = nn.Linear(256, 128)
-        self.fc_out = nn.Linear(128, action_dim)
+        hidden_dim = 64
+        self.fc1 = torch.nn.Linear(state_dim, hidden_dim)
+        self.fc2 = torch.nn.Linear(hidden_dim, action_dim)
         self.action_bound = action_bound  # action_bound是环境可以接受的动作最大值
 
-    def forward(self, x):
-        # x = F.relu(self.fc1(x))
-        # return torch.tanh(self.fc2(x)) * self.action_bound
+        # self.fc1 = nn.Linear(state_dim, 16)
+        # self.fc2 = nn.Linear(256, 128)
+        # self.fc_out = nn.Linear(128, action_dim)
+        # self.action_bound = action_bound  # action_bound是环境可以接受的动作最大值
 
+    def forward(self, x):
         x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return torch.tanh(self.fc_out(x)) * self.action_bound        
+        return torch.tanh(self.fc2(x)) * self.action_bound
+
+        # x = F.relu(self.fc1(x))
+        # x = F.relu(self.fc2(x))
+        # return torch.tanh(self.fc_out(x)) * self.action_bound        
 
 
 class QValueNet(torch.nn.Module):

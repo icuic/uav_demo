@@ -60,7 +60,7 @@ g_max_y = 5
 g_max_z = 10
 
 # 定义成功降落
-g_landing_tolerance = 0.7
+g_landing_tolerance = 2
 g_crash_shreshold = 0.5
 
 # train or eval
@@ -576,8 +576,11 @@ class UAVLandingEnv(gymnasium.Env):
 
         return state, reward, done, {'done_reason': done_reason}
 
-    def reset(self, seed=None, options=None):
+    def reset(self, tolerance=3, seed=None, options=None):
         super().reset(seed=seed)
+
+        global g_landing_tolerance
+        g_landing_tolerance = tolerance
 
         # 随机生成起飞点和目的地
         global g_start_point_x, g_start_point_y, g_start_point_z, g_destination_x, g_destination_y, g_destination_z
