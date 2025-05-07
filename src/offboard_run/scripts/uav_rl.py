@@ -148,7 +148,7 @@ if __name__ == "__main__":
         hidden_dim = 64*2
         gamma = 0.98
         tau = 0.005  # 软更新参数
-        buffer_size = 20000
+        buffer_size = 30000
         minimal_size = 1000
         batch_size = 128
         sigma = 0.3  # 高斯噪声标准差
@@ -183,6 +183,7 @@ if __name__ == "__main__":
         # success_rate_list = []
 
     early_stop = False
+    need_store = False
     continue_times = 0
     reason_fifo_list = collections.deque(maxlen=100)
     critic_loss_list = collections.deque(maxlen=1000)   # 保留最近1000个训练步的Critic损失
@@ -194,6 +195,7 @@ if __name__ == "__main__":
 
     id_tolerance = 0
     # [1473, 1855, 4319, 4757, 14989, 16663, 38031]
+    # [2492, 2916, 4570, 5566, 5795, 9425, 9787]
     list_toleralce = [4, 3, 2, 1.5, 1, 0.8, 0.6, 0.4, 0.2, 0.1]
     list_episodes = []
 
@@ -274,6 +276,7 @@ if __name__ == "__main__":
         if rate_success >= 0.90:
             continue_times += 1
             if continue_times > 100:
+                need_store = True
                 continue_times = 0
                 id_tolerance += 1
                 list_episodes.append(i_episode)
@@ -282,7 +285,8 @@ if __name__ == "__main__":
         else:
             continue_times = 0
 
-        if i_episode % 100 == 0 or early_stop:
+        if i_episode % 100 == 0 or early_stop or need_store:
+            need_store = False
             agent.save(checkpoints_path, i_episode)
             replay_buffer.save(f"{checkpoints_path}/{i_episode}_buffer.pth")
             save_return_list(i_episode, checkpoints_path, return_list)

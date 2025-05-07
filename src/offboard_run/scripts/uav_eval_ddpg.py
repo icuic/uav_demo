@@ -28,9 +28,12 @@ import rl_utils as rl_utils
 import argparse
 
 
-# 在每次开始测试之前，修改这些测试参数
-test_time = "0315-1500(1m-79pct-3850-5500)"
-restore_from = 3850
+# 在每次开始测试之前，修改这些测试参数 
+# success: 0.19, timeout: 0.78, crash: 0.00, outmap: 0.03, learning: True
+# episode: 28345, return: -85.25, tolerance: 0.4, ctimes: 0, l_epi: [2492, 2916, 4570, 5566, 5795, 9425, 9787]
+
+test_time = "0409-0830"
+restore_from = 38031
 test_numbers = 100
 
 
@@ -88,7 +91,7 @@ if __name__ == "__main__":
         timeout = 0
 
         for i_episode in range(0, test_numbers):
-            state, info = env.reset()
+            state, info = env.reset(tolerance=3)
             done = False
 
             while not done:                    
