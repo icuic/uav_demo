@@ -47,8 +47,8 @@ def moving_average(a, window_size):
     end = (np.cumsum(a[:-window_size:-1])[::2] / r)[::-1]
     return np.concatenate((begin, middle, end))
 
-restore_from = 37850
-test_time = "0327-0940"
+restore_from = 7700
+test_time = "0507-1300"
 
 a = load_return_list(restore_from, f"./checkpoints/{test_time}")
 # print(a[4900:4950])
