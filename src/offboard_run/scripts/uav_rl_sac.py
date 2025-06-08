@@ -179,6 +179,12 @@ if __name__ == "__main__":
     reason_list = []
     success_rate_list = []
 
+    early_stop = False
+    need_store = False
+    continue_times = 0
+    reason_fifo_list = collections.deque(maxlen=100)
+    critic_loss_list = collections.deque(maxlen=1000)   # 保留最近1000个训练步的Critic损失
+    actor_loss_list = collections.deque(maxlen=1000)    # 保留最近1000个训练步的Actor损失
 
     if restore_from_checkpoint:
         replay_buffer.load(f"{checkpoints_path}/{restore_from}_buffer.pth")       
@@ -186,14 +192,11 @@ if __name__ == "__main__":
         return_list = load_return_list(restore_from, checkpoints_path)
         reason_list = load_reason_list(restore_from, checkpoints_path)
         success_rate_list = load_success_rate_list(restore_from, checkpoints_path)
+        reason_fifo_list.extend(reason_list[-100:])
+        continue_times = reason_fifo_list.count('finish')
         # success_rate_list = []
 
-    early_stop = False
-    need_store = False
-    continue_times = 0
-    reason_fifo_list = collections.deque(maxlen=100)
-    critic_loss_list = collections.deque(maxlen=1000)   # 保留最近1000个训练步的Critic损失
-    actor_loss_list = collections.deque(maxlen=1000)    # 保留最近1000个训练步的Actor损失
+
 
     # 创建绘图窗口
     plt.ion()  # 启用交互模式
@@ -202,8 +205,9 @@ if __name__ == "__main__":
     id_tolerance = 0
     # [1473, 1855, 4319, 4757, 14989, 16663, 38031]
     # [2492, 2916, 4570, 5566, 5795, 9425, 9787]
-    # [433, 2110, 3451, 3670, 5782, 5883, 5984] sac ---0.6
-    list_toleralce = [4, 3, 2, 1.5, 1, 0.8, 0.6, 0.4, 0.2, 0.1]
+    # [433, 2110, 3451, 3670, 5782, 5883, 5984，9650, 14948， ] sac ---0.2
+    list_toleralce = [4, 3, 2, 1.5, 1, 0.8, 0.6, 0.4, 0.2]
+    # list_toleralce = [4, 3, 2, 1.5, 1, 0.8, 0.6]
     list_episodes = []
 
     for i_episode in range(episode_from, 50000):
@@ -285,7 +289,8 @@ if __name__ == "__main__":
             if continue_times > 100:
                 need_store = True
                 continue_times = 0
-                id_tolerance += 1
+                if id_tolerance < len(list_toleralce)-1:
+                    id_tolerance += 1
                 list_episodes.append(i_episode)
                 if id_tolerance >= len(list_toleralce):
                     early_stop = True
@@ -309,7 +314,7 @@ if __name__ == "__main__":
             with open(f'{checkpoints_path}/{i_episode}_hyperparameter' + '.json', 'w') as outfile:
                 json.dump(parameter_dictionary, outfile)
 
-        if early_stop:
-            break
+        # if early_stop:
+        #     break
 
     env.close()

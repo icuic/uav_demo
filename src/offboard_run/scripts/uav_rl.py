@@ -173,6 +173,12 @@ if __name__ == "__main__":
     reason_list = []
     success_rate_list = []
 
+    early_stop = False
+    need_store = False
+    continue_times = 0
+    reason_fifo_list = collections.deque(maxlen=100)
+    critic_loss_list = collections.deque(maxlen=1000)   # 保留最近1000个训练步的Critic损失
+    actor_loss_list = collections.deque(maxlen=1000)    # 保留最近1000个训练步的Actor损失
 
     if restore_from_checkpoint:
         replay_buffer.load(f"{checkpoints_path}/{restore_from}_buffer.pth")       
@@ -180,14 +186,10 @@ if __name__ == "__main__":
         return_list = load_return_list(restore_from, checkpoints_path)
         reason_list = load_reason_list(restore_from, checkpoints_path)
         success_rate_list = load_success_rate_list(restore_from, checkpoints_path)
+        reason_fifo_list.extend(reason_list[-100:])
+        continue_times = reason_fifo_list.count('finish')
         # success_rate_list = []
 
-    early_stop = False
-    need_store = False
-    continue_times = 0
-    reason_fifo_list = collections.deque(maxlen=100)
-    critic_loss_list = collections.deque(maxlen=1000)   # 保留最近1000个训练步的Critic损失
-    actor_loss_list = collections.deque(maxlen=1000)    # 保留最近1000个训练步的Actor损失
 
     # 创建绘图窗口
     plt.ion()  # 启用交互模式
@@ -302,7 +304,7 @@ if __name__ == "__main__":
             with open(f'{checkpoints_path}/{i_episode}_hyperparameter' + '.json', 'w') as outfile:
                 json.dump(parameter_dictionary, outfile)
 
-        if early_stop:
-            break
+        # if early_stop:
+        #     break
 
     env.close()
